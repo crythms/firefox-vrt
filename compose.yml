@@ -1,0 +1,11 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/data
+    environment:
+      DATA_DIR: /data
+      DATABASE_URL: sqlite+aiosqlite:////data/firefox-vrt.db
+      USER_AGENT: "firefox-vrt/0.1 (local dev)"

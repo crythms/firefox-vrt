@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Firefox VRT — Compare CI screenshots{% endblock %}
+{% block main %}
+<section class="card">
+  <h1>Compare Firefox chrome screenshots</h1>
+  <p class="lede">
+    Paste a Firefox revision (try / autoland / mozilla-central). We fetch its
+    <code>mochitest-browser-screenshots</code> CI artifacts from Taskcluster,
+    then diff them against a baseline you pick.
+  </p>
+  <details class="info-note">
+    <summary>The revision needs to have actually captured screenshots — most CI runs don't.</summary>
+    <p>
+      The mochitest-browser-screenshots job is a <strong>no-op unless the task
+      was launched with the <code>MOZSCREENSHOTS_SETS</code> env var set</strong>.
+      Default autoland / mozilla-central pushes finish green without capturing
+      anything. For this tool to find PNGs, the push you paste must be one
+      where someone explicitly opted in — typically a try push:
+    </p>
+    <pre><code>./mach try fuzzy -q "mochitest-browser-screenshots" \
+  --env "MOZSCREENSHOTS_SETS=Toolbars,Tabs,WindowSize,CustomTitlebar,LightweightThemes,DevTools,AppMenu,Buttons,CustomizeMode,UIDensities,Preferences"</code></pre>
+    <p>
+      If you paste a revision whose job ran but didn't capture, you'll see
+      a clear "0 PNGs" failure in the debug panel.
+    </p>
+  </details>
+  <form method="post" action="/capture" class="form-row">
+    <label>
+      Tree
+      <select name="project">
+        {% for p in projects %}
+          <option value="{{ p }}"{% if p == "try" %} selected{% endif %}>{{ p }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="grow">
+      Revision (12–40 hex chars)
+      <input name="revision" type="text" required pattern="[0-9a-fA-F]{12,40}"
+             placeholder="e.g. 7a75e5d0dc02cefe2d13353043bd67fb5432df44">
+    </label>
+    <button type="submit" class="primary">Fetch CI screenshots</button>
+  </form>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+</section>
+
+<section class="card">
+  <h2>Recent captures</h2>
+  {% if captures %}
+  <table class="list">
+    <thead><tr><th>#</th><th>Tree</th><th>Revision</th><th>Status</th><th>Fetched</th></tr></thead>
+    <tbody>
+      {% for c in captures %}
+      <tr>
+        <td><a href="/capture/{{ c.id }}">{{ c.id }}</a></td>
+        <td>{{ c.project }}</td>
+        <td class="mono">
+          <a target="_blank" rel="noopener"
+             href="https://treeherder.mozilla.org/jobs?repo={{ c.project }}&revision={{ c.revision }}&tier=1,2,3">{{ c.revision[:12] }}</a>
+        </td>
+        <td><span class="badge badge-{{ c.status }}">{{ c.status }}</span></td>
+        <td class="dim"><time class="ts" datetime="{{ c.fetched_at }}">{{ c.fetched_at }}</time></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="dim">No captures yet.</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Recent comparisons</h2>
+  {% if comparisons %}
+  <table class="list">
+    <thead><tr><th>#</th><th>Base</th><th>Candidate</th><th>Status</th><th>Created</th></tr></thead>
+    <tbody>
+      {% for c in comparisons %}
+      <tr>
+        <td><a href="/comparison/{{ c.id }}">{{ c.id }}</a></td>
+        <td><a href="/capture/{{ c.base_capture_id }}">capture {{ c.base_capture_id }}</a></td>
+        <td><a href="/capture/{{ c.candidate_capture_id }}">capture {{ c.candidate_capture_id }}</a></td>
+        <td><span class="badge badge-{{ c.status }}">{{ c.status }}</span></td>
+        <td class="dim"><time class="ts" datetime="{{ c.created_at }}">{{ c.created_at }}</time></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="dim">No comparisons yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

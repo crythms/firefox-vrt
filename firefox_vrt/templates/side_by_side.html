@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Side-by-side · {{ result.combination }}{% endblock %}
+{% block main %}
+<section class="sbs">
+  <header class="sbs-header">
+    <h1>{{ result.platform }} · <span class="mono">{{ result.combination }}</span></h1>
+    <div class="sbs-controls">
+      <button onclick="window.firefoxVrt.sbsZoom(1/1.25)">Zoom out (−)</button>
+      <button onclick="window.firefoxVrt.sbsZoom(0)">100% (0)</button>
+      <button onclick="window.firefoxVrt.sbsFit()">Fit (F)</button>
+      <button onclick="window.firefoxVrt.sbsZoom(1.25)">Zoom in (+)</button>
+      <span id="sbs-zoom-indicator" class="mono">100%</span>
+    </div>
+  </header>
+
+  <div class="sbs-panes">
+    <div class="sbs-pane" data-sbs-pane>
+      <h2>Baseline</h2>
+      <div class="sbs-scroll" data-sbs-scroll>
+        {% if result.base_path %}
+        <img data-sbs-img src="/data/{{ result.base_path }}" alt="baseline">
+        {% else %}
+        <div class="missing">(missing baseline)</div>
+        {% endif %}
+      </div>
+    </div>
+    <div class="sbs-pane" data-sbs-pane>
+      <h2>Candidate</h2>
+      <div class="sbs-scroll" data-sbs-scroll>
+        {% if result.candidate_path %}
+        <img data-sbs-img src="/data/{{ result.candidate_path }}" alt="candidate">
+        {% else %}
+        <div class="missing">(missing candidate)</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

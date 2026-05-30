@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Comparison {{ comparison.id }} — Firefox VRT{% endblock %}
+{% block main %}
+<section class="card sticky-header">
+  <h1>Comparison #{{ comparison.id }}</h1>
+  <p class="meta">
+    Baseline: <a href="/capture/{{ base.id }}"><span class="mono">{{ base.revision[:12] }}</span></a>
+    · Candidate: <a href="/capture/{{ candidate.id }}"><span class="mono">{{ candidate.revision[:12] }}</span></a>
+    · <span class="badge badge-{{ comparison.status }}">{{ comparison.status }}</span>
+  </p>
+
+  {% if comparison.status != "ready" %}
+    {% include "partials/comparison_progress.html" %}
+  {% else %}
+    <p class="summary">
+      <strong>{{ counts["differs"] }}</strong> differ ·
+      <strong>{{ counts["known-noise"] }}</strong> known noise ·
+      <strong>{{ counts["orphan"] }}</strong> orphan ·
+      <strong>{{ counts["size-mismatch"] }}</strong> size mismatch ·
+      <strong>{{ counts["identical"] }}</strong> identical
+    </p>
+
+    {% if total_results == 0 %}
+    <div class="banner banner-warning">
+      <strong>No results.</strong>
+      Neither capture had any PNG files. Check the per-platform task tables
+      on each capture's page — the artifact_count should be non-zero.
+    </div>
+    {% elif orphan_ratio >= 0.95 and counts["orphan"] > 1 %}
+    <div class="banner banner-warning">
+      <strong>{{ counts["orphan"] }} of {{ total_results }} results are orphan</strong>
+      — no files paired between the two captures. Likely causes:
+      <ul>
+        <li>The captures used different <code>MOZSCREENSHOTS_SETS</code>, so they
+            ran disjoint configurations.</li>
+        <li>One side is a synthetic / seeded capture and the other is real CI data.</li>
+        <li>The captures are from different platforms (pairing requires matching platform).</li>
+      </ul>
+      Open each capture's page and inspect the per-platform file list to verify.
+    </div>
+    {% endif %}
+
+    <div class="filter-chips">
+      {% for status in ["differs", "orphan", "size-mismatch", "known-noise", "identical"] %}
+        {% set status_label = "known noise" if status == "known-noise" else status %}
+        <button class="chip"
+                data-status="{{ status }}"
+                data-label="{{ status_label }}"
+                onclick="window.firefoxVrt.toggleStatus('{{ status }}')">
+          Show {{ status_label }}
+        </button>
+      {% endfor %}
+    </div>
+  {% endif %}
+</section>
+
+{% if comparison.status == "ready" %}
+<section class="results">
+  {% for result in results %}
+    {% include "partials/result_row.html" %}
+  {% endfor %}
+</section>
+{% endif %}
+{% endblock %}

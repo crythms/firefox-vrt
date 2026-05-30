@@ -1,0 +1,72 @@
+<article class="result row-{{ result.status }}"
+         id="result-{{ result.id }}"
+         data-status="{{ result.status }}">
+  <div class="result-label">
+    <div class="combo">
+      <span class="platform-tag">{{ result.platform }}</span>
+      <span class="mono">{{ result.combination }}</span>
+    </div>
+    <div class="badges">
+      {% set status_label = "known noise" if result.status == "known-noise" else result.status %}
+      <span class="badge badge-{{ result.status }}">{{ status_label }}</span>
+      {% if result.diff_percent is not none %}
+        <span class="dim">{{ "%.3f"|format(result.diff_percent * 100) }}%</span>
+      {% endif %}
+      {% if result.noise_reason %}
+        <span class="dim italic">{{ result.noise_reason }}</span>
+      {% endif %}
+    </div>
+
+    {% if result.base_path and result.candidate_path %}
+    <a class="side-by-side-link"
+       href="/comparison/{{ comparison_id }}/side-by-side/{{ result.id }}"
+       target="_blank">
+      Open side-by-side ↗
+    </a>
+    {% endif %}
+  </div>
+
+  <div class="result-images">
+    {%- macro missing_reason(caption, result) -%}
+      {%- if caption == "Baseline" -%}
+        {%- if result.status == "orphan" and result.candidate_path -%}
+          Only in candidate — baseline didn't produce this file
+        {%- else -%}
+          (missing)
+        {%- endif -%}
+      {%- elif caption == "Candidate" -%}
+        {%- if result.status == "orphan" and result.base_path -%}
+          Only in baseline — candidate didn't produce this file
+        {%- else -%}
+          (missing)
+        {%- endif -%}
+      {%- elif caption == "Diff" -%}
+        {%- if result.status == "orphan" -%}
+          No diff — orphan (only one side has the file)
+        {%- elif result.status == "size-mismatch" -%}
+          No diff — base and candidate images have different dimensions
+        {%- else -%}
+          (not generated)
+        {%- endif -%}
+      {%- else -%}
+        (missing)
+      {%- endif -%}
+    {%- endmacro -%}
+    {% for caption, path in [("Baseline", result.base_path),
+                              ("Candidate", result.candidate_path),
+                              ("Diff", result.diff_path)] %}
+      <figure>
+        <figcaption>{{ caption }}</figcaption>
+        {% if path %}
+          <a href="/data/{{ path }}" target="_blank">
+            <img loading="lazy" src="/data/{{ path }}" alt="{{ caption }}">
+          </a>
+        {% else %}
+          <div class="missing">
+            <span class="missing-label">{{ missing_reason(caption, result) }}</span>
+          </div>
+        {% endif %}
+      </figure>
+    {% endfor %}
+  </div>
+</article>

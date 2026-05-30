@@ -1,0 +1,30 @@
+{% if capture.status not in ("ready", "failed") %}
+<div id="progress"
+     hx-get="/capture/{{ capture.id }}/progress"
+     hx-trigger="every 2s"
+     hx-swap="outerHTML">
+{% else %}
+<div id="progress">
+{% endif %}
+  <h3>Per-platform tasks</h3>
+  {% if tasks %}
+  <table class="list">
+    <thead><tr><th>Platform</th><th>Status</th><th>Downloaded</th><th>Task</th></tr></thead>
+    <tbody>
+      {% for t in tasks %}
+      <tr>
+        <td>{{ t.platform }}</td>
+        <td><span class="badge badge-{{ t.status }}">{{ t.status }}</span></td>
+        <td>
+          {{ t.downloaded_count }}
+          {% if t.artifact_count is not none %} / {{ t.artifact_count }}{% endif %}
+        </td>
+        <td class="mono dim">{{ t.task_id }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="dim">Resolving tasks on Treeherder…</p>
+  {% endif %}
+</div>

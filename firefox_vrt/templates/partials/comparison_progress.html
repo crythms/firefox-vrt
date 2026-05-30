@@ -1,0 +1,17 @@
+{% if comparison.status not in ("ready", "failed") %}
+<div id="comp-progress"
+     hx-get="/comparison/{{ comparison.id }}/progress"
+     hx-trigger="every 2s"
+     hx-swap="outerHTML">
+{% else %}
+<div id="comp-progress">
+{% endif %}
+  <p>
+    Status: <span class="badge badge-{{ comparison.status }}">{{ comparison.status }}</span>
+  </p>
+  {% if comparison.status == "ready" %}
+    <p class="dim">Reload the page to see results.</p>
+  {% elif comparison.status == "failed" %}
+    <p class="error">{{ comparison.failure_reason or "Unknown error" }}</p>
+  {% endif %}
+</div>
