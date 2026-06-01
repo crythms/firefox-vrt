@@ -20,23 +20,23 @@ screenshots in CI. It's for **QA/release testers** eyeballing chrome changes and
           │                                      │
           ▼                                      ▼
    ┌──────────────┐   resolves via    ┌──────────────────────┐
-   │   Capture    │ ─── Treeherder ──▶│  Downloads the PNG    │
-   │ (one push)   │   + Taskcluster   │  screenshots locally  │
-   └──────────────┘                   └──────────┬───────────┘
+   │   Capture    │ ─── Treeherder ──▶│  Downloads the PNG   │
+   │ (one push)   │   + Taskcluster   │  screenshots locally │
+   └──────────────┘                   └───────────┬──────────┘
                                                   │
                                                   ▼
-                                       ┌──────────────────────┐
+                                       ┌───────────────────────┐
                                        │     Comparison        │
                                        │  pairs + diffs PNGs   │
                                        │  baseline ↔ candidate │
-                                       └──────────┬───────────┘
+                                       └──────────┬────────────┘
                                                   │
                                                   ▼
-                                       ┌──────────────────────┐
+                                       ┌───────────────────────┐
                                        │   Results: one row    │
                                        │  per screenshot, with │
                                        │  a status + diff image│
-                                       └──────────────────────┘
+                                       └───────────────────────┘
 ```
 
 - **Capture** — all screenshots from *one* revision (one CI push), possibly
