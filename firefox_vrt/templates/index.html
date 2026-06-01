@@ -46,12 +46,17 @@
 <section class="card">
   <h2>Recent captures</h2>
   {% if captures %}
-  <table class="list">
-    <thead><tr><th>#</th><th>Tree</th><th>Revision</th><th>Status</th><th>Fetched</th></tr></thead>
+  <table class="list sortable">
+    <thead><tr>
+      <th data-sort="text">Tree</th>
+      <th data-sort="text">Revision</th>
+      <th data-sort="text">Status</th>
+      <th data-sort="date" data-sort-default="desc">Fetched</th>
+      <th>Actions</th>
+    </tr></thead>
     <tbody>
       {% for c in captures %}
       <tr>
-        <td><a href="/capture/{{ c.id }}">{{ c.id }}</a></td>
         <td>{{ c.project }}</td>
         <td class="mono">
           <a target="_blank" rel="noopener"
@@ -59,6 +64,15 @@
         </td>
         <td><span class="badge badge-{{ c.status }}">{{ c.status }}</span></td>
         <td class="dim"><time class="ts" datetime="{{ c.fetched_at }}">{{ c.fetched_at }}</time></td>
+        <td class="row-actions">
+          <a href="/capture/{{ c.id }}" class="row-action">View</a>
+          <span class="sep">·</span>
+          {% set used = (capture_comparisons|default({})).get(c.id) %}
+          <form method="post" action="/capture/{{ c.id }}/delete" class="inline-form"
+                onsubmit="return confirm('{% if used %}Capture #{{ c.id }} is used in comparison(s) #{{ used|join(', #') }}. Deleting it will also delete those comparison(s) and break their images. Delete anyway?{% else %}Delete capture #{{ c.id }} and its screenshots?{% endif %}');">
+            <button type="submit" class="row-action" title="Delete capture #{{ c.id }}">Delete</button>
+          </form>
+        </td>
       </tr>
       {% endfor %}
     </tbody>
@@ -71,16 +85,29 @@
 <section class="card">
   <h2>Recent comparisons</h2>
   {% if comparisons %}
-  <table class="list">
-    <thead><tr><th>#</th><th>Base</th><th>Candidate</th><th>Status</th><th>Created</th></tr></thead>
+  <table class="list sortable">
+    <thead><tr>
+      <th data-sort="text">Base</th>
+      <th data-sort="text">Candidate</th>
+      <th data-sort="text">Status</th>
+      <th data-sort="date" data-sort-default="desc">Created</th>
+      <th>Actions</th>
+    </tr></thead>
     <tbody>
       {% for c in comparisons %}
       <tr>
-        <td><a href="/comparison/{{ c.id }}">{{ c.id }}</a></td>
-        <td><a href="/capture/{{ c.base_capture_id }}">capture {{ c.base_capture_id }}</a></td>
-        <td><a href="/capture/{{ c.candidate_capture_id }}">capture {{ c.candidate_capture_id }}</a></td>
+        <td class="mono"><a href="/capture/{{ c.base_capture_id }}">{{ c.base_capture.revision[:12] if c.base_capture else "capture " ~ c.base_capture_id }}</a></td>
+        <td class="mono"><a href="/capture/{{ c.candidate_capture_id }}">{{ c.candidate_capture.revision[:12] if c.candidate_capture else "capture " ~ c.candidate_capture_id }}</a></td>
         <td><span class="badge badge-{{ c.status }}">{{ c.status }}</span></td>
         <td class="dim"><time class="ts" datetime="{{ c.created_at }}">{{ c.created_at }}</time></td>
+        <td class="row-actions">
+          <a href="/comparison/{{ c.id }}" class="row-action">View</a>
+          <span class="sep">·</span>
+          <form method="post" action="/comparison/{{ c.id }}/delete" class="inline-form"
+                onsubmit="return confirm('Delete comparison #{{ c.id }}? (Its diff images will be removed; the captures stay.)');">
+            <button type="submit" class="row-action" title="Delete comparison #{{ c.id }}">Delete</button>
+          </form>
+        </td>
       </tr>
       {% endfor %}
     </tbody>

@@ -270,3 +270,105 @@ async def test_capture_404_for_missing_id(isolated_app):
     ) as client:
         r = await client.get("/capture/99999")
         assert r.status_code == 404
+
+
+async def _seed_pair_with_comparison(tmp_path):
+    """Insert base + candidate captures, a comparison between them, a result,
+    and matching on-disk dirs. Returns (base_id, candidate_id, comparison_id)."""
+    import firefox_vrt.db as db
+    from firefox_vrt.models import (
+        CAPTURE_READY,
+        COMPARISON_READY,
+        Capture,
+        CaptureTask,
+        Comparison,
+        Result,
+    )
+
+    sf = db.session_factory()
+    async with sf() as s:
+        base = Capture(revision="b" * 12, project="try", status=CAPTURE_READY)
+        cand = Capture(revision="c" * 12, project="try", status=CAPTURE_READY)
+        s.add_all([base, cand])
+        await s.commit()
+        await s.refresh(base)
+        await s.refresh(cand)
+        s.add(CaptureTask(capture_id=cand.id, platform="linux2404-64", task_id="T", status="ready"))
+        comp = Comparison(
+            base_capture_id=base.id,
+            candidate_capture_id=cand.id,
+            status=COMPARISON_READY,
+        )
+        s.add(comp)
+        await s.commit()
+        await s.refresh(comp)
+        s.add(Result(comparison_id=comp.id, platform="linux2404-64", combination="x.png", status="identical"))
+        await s.commit()
+        ids = (base.id, cand.id, comp.id)
+
+    (tmp_path / "captures" / str(ids[1])).mkdir(parents=True, exist_ok=True)
+    (tmp_path / "captures" / str(ids[1]) / "x.png").write_bytes(b"x")
+    (tmp_path / "comparisons" / str(ids[2])).mkdir(parents=True, exist_ok=True)
+    (tmp_path / "comparisons" / str(ids[2]) / "diff.png").write_bytes(b"x")
+    return ids
+
+
+@pytest.mark.asyncio
+async def test_index_shows_delete_with_usage_warning(isolated_app, tmp_path):
+    base_id, cand_id, comp_id = await _seed_pair_with_comparison(tmp_path)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=isolated_app), base_url="http://test"
+    ) as client:
+        r = await client.get("/")
+    assert r.status_code == 200
+    assert "Delete" in r.text
+    # The candidate capture's delete confirm should name the comparison.
+    assert f"is used in comparison(s) #{comp_id}" in r.text
+
+
+@pytest.mark.asyncio
+async def test_delete_comparison_keeps_captures(isolated_app, tmp_path):
+    import firefox_vrt.db as db
+    from firefox_vrt.models import Capture, Comparison
+
+    base_id, cand_id, comp_id = await _seed_pair_with_comparison(tmp_path)
+    compdir = tmp_path / "comparisons" / str(comp_id)
+    assert compdir.exists()
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=isolated_app), base_url="http://test"
+    ) as client:
+        r = await client.post(f"/comparison/{comp_id}/delete")
+    assert r.status_code == 303
+
+    sf = db.session_factory()
+    async with sf() as s:
+        assert await s.get(Comparison, comp_id) is None
+        assert await s.get(Capture, base_id) is not None
+        assert await s.get(Capture, cand_id) is not None
+    assert not compdir.exists()
+
+
+@pytest.mark.asyncio
+async def test_delete_capture_cascades_its_comparisons(isolated_app, tmp_path):
+    import firefox_vrt.db as db
+    from firefox_vrt.models import Capture, Comparison
+
+    base_id, cand_id, comp_id = await _seed_pair_with_comparison(tmp_path)
+    capdir = tmp_path / "captures" / str(cand_id)
+    compdir = tmp_path / "comparisons" / str(comp_id)
+    assert capdir.exists() and compdir.exists()
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=isolated_app), base_url="http://test"
+    ) as client:
+        r = await client.post(f"/capture/{cand_id}/delete")
+    assert r.status_code == 303
+
+    sf = db.session_factory()
+    async with sf() as s:
+        assert await s.get(Capture, cand_id) is None       # deleted
+        assert await s.get(Comparison, comp_id) is None     # cascaded
+        assert await s.get(Capture, base_id) is not None    # the other side stays
+    assert not capdir.exists()
+    assert not compdir.exists()

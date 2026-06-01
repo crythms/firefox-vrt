@@ -5,7 +5,7 @@
  */
 
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
   --bg: #fafafa;
   --fg: #1a1a1a;
   --dim: #666;
@@ -30,15 +30,26 @@
   --triage-investigation: #f59e0b;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #16191d;
-    --fg: #e9eaec;
-    --dim: #999;
-    --card-bg: #1f242a;
-    --border: #2d343c;
-    --primary: #4a8df0;
-  }
+/* Dark theme. A no-flash inline script sets data-theme="dark" on <html>
+   (resolving "auto" against the OS), so this single block drives dark mode —
+   no prefers-color-scheme media query needed. Status colors are retuned for
+   dark: dark tinted chip backgrounds + bright foregrounds, so both the badges
+   and the left-edge row stripes (which use the -fg values) stay vivid against
+   the dark cards. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #16191d;
+  --fg: #e9eaec;
+  --dim: #999;
+  --card-bg: #1f242a;
+  --border: #2d343c;
+  --primary: #4a8df0;
+  --diff-bg: #3b1d1d;          --diff-fg: #f87171;
+  --identical-bg: #14332a;     --identical-fg: #4ade80;
+  --orphan-bg: #3a2e12;        --orphan-fg: #fbbf24;
+  --size-mismatch-bg: #3a1f2e; --size-mismatch-fg: #f472b6;
+  --known-bg: #232a4d;         --known-fg: #a5b4fc;
+  --running-bg: #1e2a44;       --running-fg: #60a5fa;
 }
 
 * { box-sizing: border-box; }
@@ -55,7 +66,9 @@ html, body {
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 12px 24px;
+  height: 56px;            /* must match .sticky-header's top offset, so the
+                              sticky summary card meets the bar with no gap */
+  padding: 0 24px;
   border-bottom: 1px solid var(--border);
   background: var(--card-bg);
   position: sticky;
@@ -65,6 +78,25 @@ html, body {
 .brand { font-weight: 700; text-decoration: none; color: var(--fg); }
 .topnav a { margin-left: 12px; color: var(--primary); text-decoration: none; }
 .topnav a:hover { text-decoration: underline; }
+
+.theme-toggle {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border: none;
+  background: none;
+  color: var(--dim);
+  cursor: pointer;
+  border-radius: 6px;
+}
+.theme-toggle:hover { color: var(--fg); filter: none; background: none; }
+/* Show the icon for the action: sun (→ light) in dark mode, moon (→ dark) in
+   light mode. Driven purely by the data-theme attribute. */
+.theme-toggle .icon-sun, .theme-toggle .icon-moon { display: none; }
+:root[data-theme="dark"] .theme-toggle .icon-sun { display: block; }
+:root[data-theme="light"] .theme-toggle .icon-moon { display: block; }
 
 main { max-width: 1400px; margin: 0 auto; padding: 24px; }
 
@@ -76,7 +108,6 @@ main { max-width: 1400px; margin: 0 auto; padding: 24px; }
   margin-bottom: 20px;
 }
 .card h1 { margin: 0 0 8px; font-size: 22px; }
-.card h1 .title-ts { font-weight: 400; color: var(--dim); }
 .card h2 { margin: 0 0 12px; font-size: 17px; }
 .card h3 { margin: 16px 0 8px; font-size: 14px; opacity: 0.7; }
 
@@ -125,6 +156,35 @@ button:hover { filter: brightness(1.05); }
 .list { width: 100%; border-collapse: collapse; }
 .list th, .list td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
 .list th { font-weight: 600; font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.05em; }
+.list td.actions { text-align: right; width: 1%; white-space: nowrap; }
+/* Consistent link color in tables — avoid the browser's visited/unvisited
+   two-tone on revision links. */
+.list a, .list a:visited { color: var(--primary); }
+
+/* Sortable headers */
+.th-sortable { cursor: pointer; user-select: none; }
+.th-sortable:hover { color: var(--fg); }
+.th-sortable[aria-sort="ascending"]::after { content: " \25B2"; font-size: 9px; }
+.th-sortable[aria-sort="descending"]::after { content: " \25BC"; font-size: 9px; }
+
+/* Grouped row actions (View · Delete) at the right edge */
+.list td.row-actions { text-align: right; width: 1%; white-space: nowrap; }
+.row-actions .sep { color: var(--border); margin: 0 8px; }
+
+.inline-form { display: inline; margin: 0; }
+.row-action {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--primary);
+  cursor: pointer;
+  text-decoration: none;
+}
+a.row-action { text-decoration: none; }
+.row-action:hover { filter: none; color: var(--primary); text-decoration: underline; }
 
 .badge {
   display: inline-block;
@@ -178,7 +238,11 @@ body.hide-known-noise .row-known-noise { display: none; }
 .result.row-known-noise { border-left-color: var(--known-fg); }
 .result.row-identical { border-left-color: var(--identical-fg); }
 
+/* min-width:0 lets the fixed 280px label column actually constrain its
+   content so long combination names wrap instead of overflowing. */
+.result-label { min-width: 0; }
 .result-label .combo { display: flex; flex-direction: column; gap: 2px; margin-bottom: 6px; }
+.result-label .combo .mono { overflow-wrap: anywhere; }
 .platform-tag {
   display: inline-block;
   padding: 1px 8px;
@@ -215,6 +279,23 @@ body.hide-known-noise .row-known-noise { display: none; }
   line-height: 1.4;
 }
 
+/* Collapsible notices summary (wraps the warning banners) ---------- */
+details.notices { margin: 12px 0; }
+details.notices > summary {
+  cursor: pointer;
+  user-select: none;
+  list-style-position: inside;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--orphan-bg);
+  color: var(--orphan-fg);
+  font-size: 13px;
+}
+details.notices > summary:hover { filter: brightness(0.98); }
+details.notices > summary .notices-labels { font-weight: 400; opacity: 0.85; }
+details.notices[open] > summary { margin-bottom: 4px; }
+details.notices .banner { margin: 8px 0 0; }
+
 /* Diagnostic banners ----------------------------------------------- */
 .banner {
   margin: 12px 0;
@@ -226,9 +307,7 @@ body.hide-known-noise .row-known-noise { display: none; }
 .banner ul { margin: 6px 0 0 18px; padding: 0; }
 .banner li { margin: 2px 0; }
 .banner code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; background: rgba(0,0,0,0.08); padding: 1px 4px; border-radius: 3px; }
-@media (prefers-color-scheme: dark) {
-    .banner code { background: rgba(255,255,255,0.10); }
-}
+:root[data-theme="dark"] .banner code { background: rgba(255,255,255,0.10); }
 .banner-warning {
   background: var(--orphan-bg);
   color: var(--orphan-fg);

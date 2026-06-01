@@ -98,6 +98,11 @@ class CaptureTask(Base):
     # task definition's expiry (~4 weeks on try), letting us compare an old
     # capture against a new one and know they ran the same sets.
     mozscreenshots_sets: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    # The source CI job's Treeherder result ("success", "testfailed", …). A
+    # non-success value means the screenshots job was flaky/red, so this capture
+    # is likely *partial* — configs after the failure point never ran. None for
+    # captures fetched before we tracked this. Surfaced as a UI warning.
+    job_result: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     capture: Mapped[Capture] = relationship(back_populates="tasks")
 

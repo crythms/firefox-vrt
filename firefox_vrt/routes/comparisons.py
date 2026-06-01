@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import Response
-from sqlalchemy import select
+from fastapi.responses import RedirectResponse, Response
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+
+from .. import storage
 
 from typing import Iterable, Optional
 
@@ -79,6 +81,20 @@ async def _capture_sets(db: AsyncSession, capture_id: int) -> Optional[frozenset
     return normalize_sets(rows)
 
 
+async def _capture_nongreen(db: AsyncSession, capture_id: int) -> list[str]:
+    """Distinct non-success source job results for a capture (e.g.
+    ["testfailed"]). Empty when every source job was green or unknown — i.e.
+    the capture is (probably) complete."""
+    rows = (
+        await db.execute(
+            select(CaptureTask.job_result).where(
+                CaptureTask.capture_id == capture_id
+            )
+        )
+    ).scalars().all()
+    return sorted({r for r in rows if r and r != "success"})
+
+
 @router.get("/comparison/{comparison_id}")
 async def comparison_detail(
     comparison_id: int, request: Request, db: AsyncSession = Depends(get_db)
@@ -119,6 +135,9 @@ async def comparison_detail(
     cand_sets = await _capture_sets(db, comp.candidate_capture_id)
     sets_status, base_only_sets, cand_only_sets = classify_sets(base_sets, cand_sets)
 
+    base_nongreen = await _capture_nongreen(db, comp.base_capture_id)
+    cand_nongreen = await _capture_nongreen(db, comp.candidate_capture_id)
+
     return templates.TemplateResponse(
         "comparison.html",
         {
@@ -136,6 +155,8 @@ async def comparison_detail(
             "cand_sets": sorted(cand_sets) if cand_sets else [],
             "base_only_sets": base_only_sets,
             "cand_only_sets": cand_only_sets,
+            "base_nongreen": base_nongreen,
+            "cand_nongreen": cand_nongreen,
         },
     )
 
@@ -158,6 +179,25 @@ async def comparison_progress(
         "partials/comparison_progress.html",
         {"request": request, "comparison": comp},
     )
+
+
+@router.post("/comparison/{comparison_id}/delete")
+async def delete_comparison(
+    comparison_id: int, request: Request, db: AsyncSession = Depends(get_db)
+):
+    """Delete a comparison: its result rows and diff-overlay files. The
+    captures it referenced are left untouched."""
+    settings = request.app.state.settings
+    comp = await db.get(Comparison, comparison_id)
+    if comp is None:
+        raise HTTPException(status_code=404, detail="comparison not found")
+    await db.execute(delete(Result).where(Result.comparison_id == comparison_id))
+    storage.remove_dir_within(
+        settings.data_dir, storage.comparison_dir(settings.data_dir, comparison_id)
+    )
+    await db.delete(comp)
+    await db.commit()
+    return RedirectResponse(url="/", status_code=303)
 
 
 @router.post("/comparison/{comparison_id}/result/{result_id}/triage")

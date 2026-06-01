@@ -2,7 +2,6 @@
 {% block title %}Comparison {{ comparison.id }} — Firefox VRT{% endblock %}
 {% block main %}
 <section class="card sticky-header">
-  <h1>Comparison #{{ comparison.id }}</h1>
   <p class="meta">
     Baseline: <a href="/capture/{{ base.id }}"><span class="mono">{{ base.revision[:12] }}</span></a>
     · Candidate: <a href="/capture/{{ candidate.id }}"><span class="mono">{{ candidate.revision[:12] }}</span></a>
@@ -20,17 +19,7 @@
       <strong>{{ counts["identical"] }}</strong> identical
     </p>
 
-    {% if sets_status == "mismatch" %}
-    <div class="banner banner-warning">
-      <strong>Different screenshot sets.</strong>
-      Baseline ran <code>{{ base_sets|join(", ") }}</code>; candidate ran
-      <code>{{ cand_sets|join(", ") }}</code>.
-      {% if base_only_sets %} Only in baseline: <code>{{ base_only_sets|join(", ") }}</code>.{% endif %}
-      {% if cand_only_sets %} Only in candidate: <code>{{ cand_only_sets|join(", ") }}</code>.{% endif %}
-      Screenshots from non-shared sets can't pair, so they show up as
-      <strong>orphan</strong> rows below.
-    </div>
-    {% elif sets_status == "match" %}
+    {% if sets_status == "match" %}
     <p class="sets-note">✓ Same screenshot sets: <code>{{ base_sets|join(", ") }}</code></p>
     {% elif sets_status == "unknown" %}
     <p class="sets-note dim">
@@ -39,24 +28,63 @@
     </p>
     {% endif %}
 
-    {% if total_results == 0 %}
-    <div class="banner banner-warning">
-      <strong>No results.</strong>
-      Neither capture had any PNG files. Check the per-platform task tables
-      on each capture's page — the artifact_count should be non-zero.
-    </div>
-    {% elif orphan_ratio >= 0.95 and counts["orphan"] > 1 %}
-    <div class="banner banner-warning">
-      <strong>{{ counts["orphan"] }} of {{ total_results }} results are orphan</strong>
-      — no files paired between the two captures. Likely causes:
-      <ul>
-        <li>The captures used different <code>MOZSCREENSHOTS_SETS</code>, so they
-            ran disjoint configurations.</li>
-        <li>One side is a synthetic / seeded capture and the other is real CI data.</li>
-        <li>The captures are from different platforms (pairing requires matching platform).</li>
-      </ul>
-      Open each capture's page and inspect the per-platform file list to verify.
-    </div>
+    {# Collapse the (verbose) warning banners into one compact, expandable line. #}
+    {% set has_partial = base_nongreen or cand_nongreen %}
+    {% set has_sets = sets_status == "mismatch" %}
+    {% set has_no_results = total_results == 0 %}
+    {% set has_orphans = (not has_no_results) and orphan_ratio >= 0.95 and counts["orphan"] > 1 %}
+    {% set notices = [] %}
+    {% if has_partial %}{% set _ = notices.append("partial capture") %}{% endif %}
+    {% if has_sets %}{% set _ = notices.append("different sets") %}{% endif %}
+    {% if has_no_results %}{% set _ = notices.append("no results") %}{% endif %}
+    {% if has_orphans %}{% set _ = notices.append(counts["orphan"] ~ "/" ~ total_results ~ " orphan") %}{% endif %}
+    {% if notices %}
+    <details class="notices">
+      <summary><strong>⚠ {{ notices|length }} notice{{ "s" if notices|length != 1 else "" }}</strong> <span class="notices-labels">{{ notices|join(" · ") }}</span></summary>
+      {% if has_partial %}
+      <div class="banner banner-warning">
+        <strong>Partial capture in this comparison.</strong>
+        {% if base_nongreen %} Baseline's source job was
+          <code>{{ base_nongreen|join(", ") }}</code>.{% endif %}
+        {% if cand_nongreen %} Candidate's source job was
+          <code>{{ cand_nongreen|join(", ") }}</code>.{% endif %}
+        A non-green mozscreenshots run stops early, so some screenshots may be
+        missing — those show up as <strong>orphan</strong> rows here and don't
+        necessarily indicate a real change.
+      </div>
+      {% endif %}
+      {% if has_sets %}
+      <div class="banner banner-warning">
+        <strong>Different screenshot sets.</strong>
+        Baseline ran <code>{{ base_sets|join(", ") }}</code>; candidate ran
+        <code>{{ cand_sets|join(", ") }}</code>.
+        {% if base_only_sets %} Only in baseline: <code>{{ base_only_sets|join(", ") }}</code>.{% endif %}
+        {% if cand_only_sets %} Only in candidate: <code>{{ cand_only_sets|join(", ") }}</code>.{% endif %}
+        Screenshots from non-shared sets can't pair, so they show up as
+        <strong>orphan</strong> rows below.
+      </div>
+      {% endif %}
+      {% if has_no_results %}
+      <div class="banner banner-warning">
+        <strong>No results.</strong>
+        Neither capture had any PNG files. Check the per-platform task tables
+        on each capture's page — the artifact_count should be non-zero.
+      </div>
+      {% endif %}
+      {% if has_orphans %}
+      <div class="banner banner-warning">
+        <strong>{{ counts["orphan"] }} of {{ total_results }} results are orphan</strong>
+        — no files paired between the two captures. Likely causes:
+        <ul>
+          <li>The captures used different <code>MOZSCREENSHOTS_SETS</code>, so they
+              ran disjoint configurations.</li>
+          <li>One side is a synthetic / seeded capture and the other is real CI data.</li>
+          <li>The captures are from different platforms (pairing requires matching platform).</li>
+        </ul>
+        Open each capture's page and inspect the per-platform file list to verify.
+      </div>
+      {% endif %}
+    </details>
     {% endif %}
 
     <div class="filter-chips">

@@ -4,6 +4,19 @@
 <meta charset="utf-8">
 <title>{% block title %}Firefox VRT{% endblock %}</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+  // Resolve the theme before first paint to avoid a flash. Preference is
+  // "auto" | "light" | "dark"; "auto" follows the OS. We set a concrete
+  // light/dark on <html> so the CSS only needs one dark override block.
+  (function () {
+    try {
+      var pref = localStorage.getItem("vrt-theme") || "auto";
+      var dark = pref === "dark"
+        || (pref === "auto" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+      document.documentElement.dataset.theme = dark ? "dark" : "light";
+    } catch (e) {}
+  })();
+</script>
 <link rel="stylesheet" href="{{ request.url_for('static', path='style.css') }}">
 <script src="{{ request.url_for('static', path='htmx.min.js') }}" defer></script>
 <script src="{{ request.url_for('static', path='app.js') }}" defer></script>
@@ -14,6 +27,25 @@
   <nav class="topnav">
     <a href="/">New comparison</a>
   </nav>
+  <button class="theme-toggle" id="theme-toggle" type="button"
+          aria-label="Toggle light / dark theme" title="Toggle light / dark theme">
+    <svg class="icon-sun" viewBox="0 0 24 24" width="18" height="18" fill="none"
+         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+    <svg class="icon-moon" viewBox="0 0 24 24" width="18" height="18" fill="none"
+         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+    </svg>
+  </button>
 </header>
 <main>
 {% block main %}{% endblock %}

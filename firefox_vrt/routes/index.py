@@ -8,6 +8,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from .. import fetcher
 from ..db import get_db
@@ -31,15 +32,39 @@ async def landing(request: Request, db: AsyncSession = Depends(get_db)):
     ).scalars().all()
     comparisons = (
         await db.execute(
-            select(Comparison).order_by(Comparison.id.desc()).limit(20)
+            select(Comparison)
+            .options(
+                selectinload(Comparison.base_capture),
+                selectinload(Comparison.candidate_capture),
+            )
+            .order_by(Comparison.id.desc())
+            .limit(20)
         )
     ).scalars().all()
+    # Map each capture -> comparison ids that reference it, so the delete
+    # confirmation can warn which comparisons a capture deletion would take out.
+    # Scan all comparisons (not just the recent 20 shown) for accuracy.
+    usage_rows = (
+        await db.execute(
+            select(
+                Comparison.id,
+                Comparison.base_capture_id,
+                Comparison.candidate_capture_id,
+            )
+        )
+    ).all()
+    capture_comparisons: dict[int, list[int]] = {}
+    for comp_id, base_id, cand_id in usage_rows:
+        for cap_id in {base_id, cand_id}:
+            capture_comparisons.setdefault(cap_id, []).append(comp_id)
+    capture_comparisons = {k: sorted(v) for k, v in capture_comparisons.items()}
     return templates.TemplateResponse(
         "index.html",
         {
             "request": request,
             "captures": captures,
             "comparisons": comparisons,
+            "capture_comparisons": capture_comparisons,
             "projects": sorted(VALID_PROJECTS),
         },
     )

@@ -23,6 +23,20 @@ from .pairing import platform_from_job_name
 SCREENSHOT_JOB_SYMBOL = "ss"
 SCREENSHOT_JOB_GROUP_SYMBOL = "M"
 
+# How much we prefer each Treeherder job result when picking the run to fetch
+# for a platform. We deliberately include non-green *completed* runs: a flaky
+# mozscreenshots job that ends `testfailed` still uploads the screenshots it
+# captured before the failure, and a partial-but-labelled capture beats a
+# misleading "nothing found". Higher rank wins; rank 0 results (retried,
+# superseded, cancelled, still-running) are skipped — they have no usable final
+# artifacts. Ties broken by the latest run.
+_RESULT_RANK = {
+    "success": 3,
+    "testfailed": 2,
+    "busted": 1,
+    "exception": 1,
+}
+
 
 @dataclass
 class ScreenshotTask:
@@ -108,8 +122,11 @@ class Clients:
         # Notes on params:
         #  - `tier` must explicitly include 3, because browser-screenshots-e10s
         #    is Tier 3 and Treeherder's /jobs/ endpoint excludes Tier 3 by default.
-        #  - `result=success` so we ignore in-progress / busted / retried runs;
-        #    we only want artifacts we can actually download.
+        #  - We deliberately do NOT filter `result=success`. mozscreenshots is
+        #    flaky; a `testfailed` run still uploads the screenshots it captured
+        #    before dying, so we fetch those (and flag the capture as partial)
+        #    rather than report a misleading "no job found". Non-terminal runs
+        #    (retried / running) are dropped below via _RESULT_RANK.
         #  - We do NOT filter by job_type_symbol/job_group_symbol here. Earlier
         #    we tried filtering server-side and got 0 results for a push that
         #    visibly had M(ss) jobs — the symbol-filter combination was too
@@ -119,7 +136,6 @@ class Clients:
             "count": 2000,
             "push_id": push_id,
             "tier": "1,2,3",
-            "result": "success",
         }
         r = await self._client.get(url, params=params)
         r.raise_for_status()
@@ -140,8 +156,11 @@ class Clients:
         # platform — notably M(ss) (Fission, the default) and M-nofis(ss)
         # (Fission disabled). They render the same chrome but are distinct
         # Treeherder jobs, so without filtering we'd fetch both and end up with
-        # two CaptureTasks per platform. We keep only the canonical M(ss) run.
-        chosen: dict[str, tuple[str, ScreenshotTask]] = {}
+        # two CaptureTasks per platform. We keep only the canonical M(ss) run,
+        # and among that platform's runs pick the best terminal one (success
+        # over a flaky testfailed; latest run on a tie).
+        chosen: dict[str, ScreenshotTask] = {}
+        chosen_key: dict[str, tuple] = {}
         for job in jobs:
             task_id = job.get("task_id")
             job_type_name = job.get("job_type_name") or ""
@@ -158,21 +177,26 @@ class Clients:
             # as a "-nofis" suffix on the job name.
             if "nofis" in group_symbol.lower() or "-nofis" in job_type_name.lower():
                 continue
+            result = str(job.get("result", ""))
+            rank = _RESULT_RANK.get(result, 0)
+            if rank == 0:
+                continue  # retried / superseded / cancelled / still running
+            run_id = int(job.get("retry_id", 0) or 0)
             platform = platform_from_job_name(job_type_name) or "unknown"
-            task = ScreenshotTask(
+            # One task per platform: keep the highest (result rank, run) seen.
+            key = (rank, run_id)
+            if platform in chosen and key <= chosen_key[platform]:
+                continue
+            chosen[platform] = ScreenshotTask(
                 platform=platform,
                 job_type_name=job_type_name,
                 task_id=str(task_id),
-                run_id=int(job.get("retry_id", 0) or 0),
-                result=str(job.get("result", "")),
+                run_id=run_id,
+                result=result,
             )
-            # One task per platform. If two non-nofis screenshots jobs somehow
-            # share a platform, prefer the canonical "M" group; else first seen.
-            prev = chosen.get(platform)
-            if prev is None or (group_symbol == "M" and prev[0] != "M"):
-                chosen[platform] = (group_symbol, task)
+            chosen_key[platform] = key
 
-        tasks = [task for _, task in chosen.values()]
+        tasks = list(chosen.values())
         if not tasks:
             raise NoScreenshotsJob(
                 f"No browser-screenshots tasks on push {push_id} ({project}/{revision})"

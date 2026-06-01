@@ -49,11 +49,11 @@ screenshots in CI. It's for **QA/release testers** eyeballing chrome changes and
 
 ## Quick start
 
-Needs **Python 3.9–3.13**. (Python 3.14 currently breaks Jinja2's template
-cache; on macOS the system interpreter at `/usr/bin/python3` is a safe 3.9.)
+Needs **Python 3.9–3.13** (3.14 currently breaks Jinja2; on macOS
+`/usr/bin/python3` is a safe 3.9).
 
 ```bash
-python3 -m venv .venv          # first time only — use a 3.9–3.13 interpreter
+python3 -m venv .venv          # first time only
 .venv/bin/pip install -e .
 .venv/bin/uvicorn firefox_vrt.app:app
 open http://localhost:8000
@@ -62,27 +62,19 @@ open http://localhost:8000
 Or `docker compose up`. Data (SQLite DB + downloaded screenshots) lives in
 `./data/`.
 
-> If you ever rename or move the project folder, the venv's scripts hard-code
-> the old path and break — just recreate it (`rm -rf .venv` and repeat the
-> steps above).
-
 ---
 
 ## Walkthrough
 
-1. On the **landing page**, pick a **Tree** and paste a **Revision** (12–40 hex
-   chars), then click **Fetch CI screenshots**.
-2. You land on the **Capture page** while screenshots download; it auto-refreshes.
-   The status badge walks `pending` → `fetching` (blue) → `ready` (green), or
-   `failed` (red).
-3. Repeat for the *other* revision (typically the parent = your baseline).
-4. On the candidate's Capture page, use **Compare against a baseline**: pick the
-   baseline from the dropdown and click **Run comparison**.
-5. The **Comparison page** shows a summary, filter chips, and one row per
-   screenshot. By default only the interesting rows (`differs`, `orphan`,
-   `size-mismatch`) are visible.
-6. Click **Open side-by-side ↗** on any row to inspect at full zoom with synced
-   pan.
+1. On the landing page, pick a **Tree** and paste a **Revision**, then **Fetch
+   CI screenshots**. You land on the Capture page while it downloads.
+2. Repeat for the *other* revision (typically the parent = your baseline).
+3. On the candidate's Capture page, use **Compare against a baseline** and
+   **Run comparison**.
+4. The Comparison page shows one row per screenshot. By default only the
+   interesting ones (`differs`, `orphan`, `size-mismatch`) show; filter chips
+   reveal the rest. Open any row **side-by-side** for a synced-pan, zoomable
+   two-pane view (`+`/`−` zoom, `0` reset, `F` fit).
 
 > **Which revisions actually have screenshots?** Most don't. The
 > `mochitest-browser-screenshots` job is a no-op unless the task was launched
@@ -95,116 +87,33 @@ Or `docker compose up`. Data (SQLite DB + downloaded screenshots) lives in
 >   --env "MOZSCREENSHOTS_SETS=Toolbars,Tabs,WindowSize,CustomTitlebar,LightweightThemes,DevTools,AppMenu,Buttons,CustomizeMode,UIDensities,Preferences"
 > ```
 >
-> Paste a revision that captured nothing and the Debug panel shows a clear "0
-> PNGs" failure. Also note **pairing requires matching sets and platforms**: two
-> captures only produce useful results if they ran the *same* sets on the *same*
-> platform — otherwise almost everything is `orphan` and the Comparison page
-> warns you.
+> Pairing also requires matching **sets** and **platforms**: two captures only
+> produce useful results if they ran the *same* sets on the *same* platform —
+> otherwise almost everything is `orphan`.
 
 ---
 
-## The pages
+## Reading the results
 
-### Landing page — `GET /`
+Each screenshot in a comparison gets exactly one status:
 
-- **Compare** form: **Tree** dropdown (`try` / `autoland` / `mozilla-central`,
-  defaults to `try`), **Revision** field (12–40 hex), **Fetch CI screenshots**
-  button (jumps to the existing capture if you've already fetched this
-  revision + tree). Plus an expandable note on the `MOZSCREENSHOTS_SETS` caveat.
-- **Recent captures** / **Recent comparisons** tables (last 20 each). Click `#`
-  to open; a capture's **Revision** links out to that push on Treeherder.
-- Timestamps are stored UTC but rendered in *your* local timezone, 12-hour with
-  AM/PM and tz abbreviation (e.g. `May 30, 2026, 11:18 AM PDT`).
-
-### Capture page — `GET /capture/{id}`
-
-State of one revision's screenshot download.
-
-- **Header** — tree, full revision, status badge, fetch time.
-- **Progress** — live area (polls every 2 s) while `pending` / `fetching`.
-- **Debug details** — expandable (auto-opens on failure): IDs, push ID,
-  **screenshot sets**, data dir, status; outbound links (**Treeherder**, **hg
-  JSON**, **jobs API**, per-task **Task ID**); and a per-task table (one row per
-  platform) with status, **sets**, run number, and `downloaded / total` count.
-
-> **Screenshot sets.** VRT records the `MOZSCREENSHOTS_SETS` each task ran with
-> (e.g. `Toolbars,Tabs`), read from the Taskcluster task definition at fetch
-> time and stored per task. Task definitions expire (~4 weeks on try), so
-> capturing this at fetch time means the provenance survives — letting you
-> compare a months-old capture against a fresh one and confirm they ran the
-> same sets. Captures fetched before this feature show `(unknown)`; run
-> `scripts/backfill_mozscreenshots_sets.py` to fill them in while their task
-> definitions still exist.
-
-> When a push runs more than one screenshots variant on a platform — e.g.
-> `M(ss)` (Fission, the default) and `M-nofis(ss)` (Fission disabled) — VRT
-> fetches **only the canonical `M(ss)` run**, so you get one task per platform
-> rather than near-duplicate captures.
-- **Compare against a baseline** (once `ready`) — dropdown of ready captures
-  (including this one, for a "diff against self" sanity check) + **Run
-  comparison**.
-
-### Comparison page — `GET /comparison/{id}`
-
-The main event — the diff between baseline and candidate.
-
-- **Header** (sticky) — both revisions (linked to their captures) + status badge.
-- **Progress** while `diffing`; auto-refreshes when done.
-- **Summary line** — counts per status (*"N differ · N known noise · …"*).
-- **Set comparison** — right under the summary: a green *"✓ same screenshot
-  sets"* note when both captures ran the same sets, or a **mismatch banner**
-  naming what each side ran and which sets are unique to one (those can't pair,
-  so they show up as `orphan` rows). Says *unknown* if either capture predates
-  set-tracking.
-- **Warning banners** when relevant: *No results* (neither capture had PNGs);
-  *Mostly orphans* (≥95% orphaned — likely different sets/platforms, with a
-  checklist).
-- **Filter chips** — see below.
-- **Result rows** (interesting first), each with: platform tag + combination
-  name, status badge, diff % and known-noise reason when applicable, **Open
-  side-by-side ↗** (when both sides have an image), and three thumbnails
-  (**Baseline** / **Candidate** / **Diff** — missing ones show a caption).
-
-### Side-by-side view — `GET /comparison/{id}/side-by-side/{result_id}`
-
-Opens in a new tab. **Baseline** and **Candidate** panes with **synced
-scroll/pan** (both panes stay at the same zoom and position) and zoom controls.
-
----
-
-## Statuses
-
-**Capture / Comparison lifecycle:** `pending` → `fetching`/`diffing` (blue) →
-`ready` (green), or `failed` (red, see the failure reason / debug panel).
-
-**Result statuses** — each screenshot in a comparison gets exactly one:
-
-| Badge | Meaning | Shown by default? |
+| Status | Meaning | Shown by default? |
 |---|---|---|
 | `differs` | Changed beyond the noise threshold. **The signal you care about.** | ✅ Yes |
 | `orphan` | Exists on only one side, so it can't be diffed. Usually different sets/platforms. | ✅ Yes |
-| `size-mismatch` | Present on both sides but at different dimensions, so a pixel diff isn't meaningful. | ✅ Yes |
-| `known noise` | Differed, but matches a pre-recorded noise rule, so it's been forgiven (see below). | ❌ Hidden |
+| `size-mismatch` | Present on both sides but at different dimensions. | ✅ Yes |
+| `known noise` | Differed, but matches a pre-recorded noise rule, so it's forgiven (see below). | ❌ Hidden |
 | `identical` | No meaningful difference. | ❌ Hidden |
 
-`identical` and `known noise` start hidden to keep the signal high; reveal them
-with the filter chips when you want them.
+`identical` and `known noise` start hidden to keep the signal high; the filter
+chips reveal them.
 
-### Filter chips
-
-On the Comparison page, one chip per status toggles whether those rows show. A
-chip reads **"Hide `<status>`"** when visible and **"Show `<status>`"** when
-hidden; `identical` and `known noise` start hidden. Filtering is purely visual
-and client-side — it never changes the underlying results.
-
-### Side-by-side controls
-
-| Button | Key | Action |
-|---|---|---|
-| Zoom out (−) | `-` | Zoom out 1.25× |
-| 100% (0) | `0` | Reset to actual pixel size |
-| Fit (F) | `F` | Scale to fit the pane |
-| Zoom in (+) | `+` / `=` | Zoom in 1.25× |
+**How a diff is decided** — for each paired screenshot, the tool compares pixels
+by the largest absolute difference across R/G/B, counting a pixel as "changed"
+only above a **tolerance of 8/255 (~3.1%)** (ignores anti-aliasing; matches the
+old `compare_screenshots` ImageMagick `-fuzz 3% -metric AE`). If **changed ÷
+total pixels** exceeds the **0.1% threshold** it's `differs`, else `identical`.
+A diff overlay PNG (baseline greyed out, changed pixels in red) shows *where*.
 
 ---
 
@@ -222,11 +131,9 @@ so it catches only the noise, not a real regression:
 A `differs` result matching all three is demoted to `known noise` and the rule's
 **reason** shows on the row. The **pixel ceiling is the safety valve**: if the
 same screenshot differs by *more* than allowed, it stays `differs` (a shadow
-wobble is noise; the whole panel moving is a regression).
-
-It's shown (behind a toggle) rather than silently dropped because the rule is a
-heuristic, not proof — a real regression could fall inside the noise band, so
-keeping the row auditable matters, and marking it `identical` would be a lie.
+wobble is noise; the whole panel moving is a regression). It's hidden behind a
+toggle rather than dropped, because the rule is a heuristic — a real regression
+could fall inside the noise band, so the row stays auditable.
 
 Rules live in `firefox_vrt/data/known_noise.json`; edit it when the team finds a
 new noise source:
@@ -243,19 +150,22 @@ new noise source:
 
 ---
 
-## How the diff is computed
+## Screenshot sets & partial captures
 
-For each paired screenshot:
+**Sets.** Each capture records the `MOZSCREENSHOTS_SETS` its CI job ran (e.g.
+`Toolbars,Tabs`), read from Taskcluster at fetch time so the provenance survives
+the task's ~4-week expiry — letting you compare a months-old capture against a
+fresh one and confirm they ran the same sets. Comparisons can only pair
+screenshots from sets *both* captures ran; non-shared sets show up as `orphan`,
+and the Comparison page flags a set mismatch.
 
-1. Load both as RGB. If **dimensions differ** → `size-mismatch`, no diff image.
-2. Per pixel, take the **largest absolute difference across R/G/B**. A pixel is
-   "changed" only if that exceeds a **tolerance of 8/255 (~3.1%)**, ignoring
-   anti-aliasing noise (matches the old `compare_screenshots` CLI's ImageMagick
-   `-fuzz 3% -metric AE`).
-3. **Diff % = changed ÷ total pixels.** Above the **0.1% threshold** →
-   `differs`, else `identical`. This % is what shows on each row.
-4. A **diff overlay PNG** is written: baseline desaturated to grey, changed
-   pixels painted solid **red** — easy to scan for *where* the change is.
+**Partial / flaky captures.** mozscreenshots is flaky, so VRT does **not**
+require the CI job to be green. A `testfailed` run still uploads the screenshots
+it captured before dying, so VRT fetches those and labels the capture *partial*.
+Configurations after the failure point never ran, so a comparison against a
+partial capture shows the missing screenshots as `orphan` rows, not real diffs.
+(When a push runs both `M(ss)` and `M-nofis(ss)` on a platform, VRT fetches only
+the canonical `M(ss)` run.)
 
 ---
 
@@ -285,14 +195,12 @@ Helpers in `scripts/` for testing without live CI. Run tests with
   on-disk PNGs exercising every result status. Click through the whole UI
   without CI access.
 - **`perturb_capture.py <source_capture_id> [--all-statuses]`** — clones a *real*
-  capture, paints deliberate diffs, and compares original vs. clone. See the
-  `differs` path on real screenshots without an actual regression.
+  capture, paints deliberate diffs, and compares original vs. clone.
 - **`decode_mach_jwt.py`** — diagnoses `mach try` permission errors by decoding
-  the cached Auth0 token and showing whether your session carries the `scm_level`
-  group claim Lando needs. Run where `mach`'s auth cache lives.
+  the cached Auth0 token (does your session carry the `scm_level` claim Lando
+  needs?). Run where `mach`'s auth cache lives.
 - **`backfill_mozscreenshots_sets.py`** — fills in `MOZSCREENSHOTS_SETS` for
-  captures fetched before set-tracking, by re-reading their Taskcluster task
-  definitions (only works while those definitions are still live).
+  captures fetched before set-tracking, while their task definitions still exist.
 
 ---
 

@@ -134,6 +134,7 @@ async def _fetch_capture_impl(
                         run_id=t.run_id,
                         status=models.TASK_PENDING,
                         mozscreenshots_sets=sets,
+                        job_result=t.result or None,
                     )
                 )
             await session.commit()

@@ -166,6 +166,67 @@ async def test_find_screenshots_tasks_parses_legacy_compact_format(clients: Clie
 
 
 @pytest.mark.asyncio
+async def test_find_screenshots_tasks_includes_nongreen(clients: Clients) -> None:
+    """A flaky `testfailed` screenshots job is still fetched (for its partial
+    artifacts), with the result recorded so the UI can flag it."""
+    with respx.mock(base_url=TH) as router:
+        router.get("/api/project/try/push/").mock(
+            return_value=httpx.Response(200, json={"results": [{"id": 1}]})
+        )
+        router.get("/api/project/try/jobs/").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "results": [
+                        {
+                            "task_id": "FAILED_TASK",
+                            "job_type_name": "test-linux2404-64/opt-mochitest-browser-screenshots",
+                            "job_group_symbol": "M",
+                            "retry_id": 0,
+                            "result": "testfailed",
+                        },
+                    ]
+                },
+            )
+        )
+        tasks = await clients.find_screenshots_tasks("try", "deadbeef")
+    assert len(tasks) == 1
+    assert tasks[0].task_id == "FAILED_TASK"
+    assert tasks[0].result == "testfailed"
+    await clients.close()
+
+
+@pytest.mark.asyncio
+async def test_find_screenshots_tasks_prefers_success_and_skips_retry(
+    clients: Clients,
+) -> None:
+    """Among runs of one platform's job: skip the retried run, and prefer the
+    successful run over a failed one."""
+    job = "test-linux2404-64/opt-mochitest-browser-screenshots"
+    with respx.mock(base_url=TH) as router:
+        router.get("/api/project/try/push/").mock(
+            return_value=httpx.Response(200, json={"results": [{"id": 1}]})
+        )
+        router.get("/api/project/try/jobs/").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "results": [
+                        {"task_id": "RETRIED", "job_type_name": job, "job_group_symbol": "M", "retry_id": 0, "result": "retry"},
+                        {"task_id": "FAILED", "job_type_name": job, "job_group_symbol": "M", "retry_id": 1, "result": "testfailed"},
+                        {"task_id": "GREEN", "job_type_name": job, "job_group_symbol": "M", "retry_id": 2, "result": "success"},
+                    ]
+                },
+            )
+        )
+        tasks = await clients.find_screenshots_tasks("try", "deadbeef")
+    assert len(tasks) == 1
+    assert tasks[0].task_id == "GREEN"
+    assert tasks[0].result == "success"
+    await clients.close()
+
+
+@pytest.mark.asyncio
 async def test_get_task_env_returns_env(clients: Clients) -> None:
     with respx.mock(base_url=TC) as router:
         router.get("/api/queue/v1/task/TASK_X").mock(

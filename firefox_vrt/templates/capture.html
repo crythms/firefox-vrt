@@ -2,16 +2,33 @@
 {% block title %}Capture {{ capture.id }} — Firefox VRT{% endblock %}
 {% block main %}
 <section class="card">
-  <h1>Capture #{{ capture.id }}:
-    <time class="ts title-ts" datetime="{{ capture.fetched_at }}">{{ capture.fetched_at }}</time>
-  </h1>
+  <h1><time class="ts" datetime="{{ capture.fetched_at }}">{{ capture.fetched_at }}</time></h1>
   <p class="meta">
-    <code>{{ capture.project }}</code> · <span class="mono">{{ capture.revision }}</span>
-    · <span class="badge badge-{{ capture.status }}">{{ capture.status }}</span>
-    · fetched <time class="ts" datetime="{{ capture.fetched_at }}">{{ capture.fetched_at }}</time>
+    <code>{{ capture.project }}</code> ·
+    <span class="mono">{{ capture.revision }}</span>
+    {% if capture.revision|length >= 12 %}
+      · <a target="_blank"
+           href="https://treeherder.mozilla.org/jobs?repo={{ capture.project }}&revision={{ capture.revision }}&tier=1,2,3">Treeherder ↗</a>
+      · <a target="_blank"
+           href="https://hg.mozilla.org/{{ capture.project }}/json-rev/{{ capture.revision }}">hg ↗</a>
+    {% endif %}
   </p>
   {% if capture.failure_reason %}
     <p class="error">{{ capture.failure_reason }}</p>
+  {% endif %}
+
+  {% if nongreen_tasks %}
+  <details class="notices">
+    <summary><strong>⚠ 1 notice</strong> <span class="notices-labels">partial capture</span></summary>
+    <div class="banner banner-warning">
+      <strong>Partial capture — source CI job was not green.</strong>
+      mozscreenshots reported
+      {% for t in nongreen_tasks %}<code>{{ t.job_result }}</code> on {{ t.platform }}{% if not loop.last %}, {% endif %}{% endfor %}.
+      The screenshots captured before the failure are here, but configurations
+      after it never ran — so this set is likely <strong>incomplete</strong>, and
+      a comparison against it may show those missing screenshots as orphans.
+    </div>
+  </details>
   {% endif %}
 
   <div id="progress"
@@ -22,90 +39,6 @@
        {% endif %}>
     {% include "partials/capture_progress.html" %}
   </div>
-
-  <details class="debug-panel" {% if capture.status == "failed" %}open{% endif %}>
-    <summary>Debug details</summary>
-    <dl class="debug-grid">
-      <dt>Capture ID</dt><dd class="mono">{{ capture.id }}</dd>
-      <dt>Tree</dt><dd>{{ capture.project }}</dd>
-      <dt>Revision</dt>
-      <dd class="mono">
-        {{ capture.revision }}
-        {% if capture.revision|length >= 12 %}
-          ·
-          <a target="_blank"
-             href="https://treeherder.mozilla.org/jobs?repo={{ capture.project }}&revision={{ capture.revision }}&tier=1,2,3">
-            Treeherder
-          </a>
-          ·
-          <a target="_blank"
-             href="https://hg.mozilla.org/{{ capture.project }}/json-rev/{{ capture.revision }}">
-            hg JSON
-          </a>
-        {% endif %}
-      </dd>
-      <dt>Push ID</dt>
-      <dd class="mono">
-        {{ capture.push_id if capture.push_id is not none else "(not resolved)" }}
-        {% if capture.push_id %}
-          ·
-          <a target="_blank"
-             href="https://treeherder.mozilla.org/api/project/{{ capture.project }}/jobs/?count=2000&push_id={{ capture.push_id }}&tier=1,2,3&result=success">
-            jobs API
-          </a>
-        {% endif %}
-      </dd>
-      <dt>Screenshot sets</dt>
-      <dd>{{ sets_summary if sets_summary else "(unknown)" }}</dd>
-      <dt>Data directory</dt><dd class="mono">{{ capture.dir_path or "(unset)" }}</dd>
-      <dt>Status</dt>
-      <dd>
-        <span class="badge badge-{{ capture.status }}">{{ capture.status }}</span>
-      </dd>
-      {% if capture.failure_reason %}
-      <dt>Failure reason</dt>
-      <dd class="error-text">{{ capture.failure_reason }}</dd>
-      {% endif %}
-    </dl>
-
-    {% if tasks %}
-    <h4>Per-task detail</h4>
-    <table class="list debug-tasks">
-      <thead>
-        <tr>
-          <th>Platform</th>
-          <th>Status</th>
-          <th>Sets</th>
-          <th>Task ID</th>
-          <th>Run</th>
-          <th>Downloaded</th>
-          <th>Failure reason</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for t in tasks %}
-        <tr>
-          <td>{{ t.platform }}</td>
-          <td><span class="badge badge-{{ t.status }}">{{ t.status }}</span></td>
-          <td>{{ t.mozscreenshots_sets or "—" }}</td>
-          <td class="mono">
-            <a target="_blank"
-               href="https://firefox-ci-tc.services.mozilla.com/tasks/{{ t.task_id }}">
-              {{ t.task_id }}
-            </a>
-          </td>
-          <td>{{ t.run_id }}</td>
-          <td>
-            {{ t.downloaded_count }}
-            {% if t.artifact_count is not none %} / {{ t.artifact_count }}{% endif %}
-          </td>
-          <td class="error-text">{{ t.failure_reason or "" }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% endif %}
-  </details>
 </section>
 
 {% if capture.status == "ready" %}
@@ -119,7 +52,7 @@
         <option value="">— pick a baseline —</option>
         {% for c in baseline_candidates %}
           <option value="{{ c.id }}">
-            #{{ c.id }} · {{ c.project }} · {{ c.revision[:12] }}
+            {{ c.project }} · {{ c.revision[:12] }}{% if candidate_sets.get(c.id) %} · {{ candidate_sets[c.id] }}{% endif %}
           </option>
         {% endfor %}
       </select>

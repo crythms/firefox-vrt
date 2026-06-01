@@ -34,6 +34,39 @@
   }
   document.addEventListener("DOMContentLoaded", initChips);
 
+  // --- Theme toggle (auto / light / dark) ------------------------------------
+  // The <head> inline script already applied the theme to avoid a flash; here
+  // we wire the selector and keep "auto" in sync if the OS theme changes.
+
+  const THEME_KEY = "vrt-theme";
+  const darkMql = window.matchMedia("(prefers-color-scheme: dark)");
+
+  function readThemePref() {
+    try { return localStorage.getItem(THEME_KEY) || "auto"; } catch (e) { return "auto"; }
+  }
+  function applyTheme(pref) {
+    const dark = pref === "dark" || (pref === "auto" && darkMql.matches);
+    document.documentElement.dataset.theme = dark ? "dark" : "light";
+  }
+  function initTheme() {
+    // Default is "auto" (follow the OS) until the user toggles, after which we
+    // store an explicit light/dark choice.
+    applyTheme(readThemePref());
+    const btn = document.getElementById("theme-toggle");
+    if (btn) {
+      btn.addEventListener("click", () => {
+        const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+        try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+        applyTheme(next);
+      });
+    }
+    // Follow OS changes only while the preference is still "auto".
+    const onOsChange = () => { if (readThemePref() === "auto") applyTheme("auto"); };
+    if (darkMql.addEventListener) darkMql.addEventListener("change", onOsChange);
+    else if (darkMql.addListener) darkMql.addListener(onOsChange);
+  }
+  document.addEventListener("DOMContentLoaded", initTheme);
+
   // --- Timestamp formatting --------------------------------------------------
   // Server stores a UTC instant (ISO 8601). Render it in the viewer's local
   // zone as a 12-hour clock with AM/PM and a tz abbreviation.
@@ -56,6 +89,65 @@
   }
   document.addEventListener("DOMContentLoaded", () => formatTimestamps());
   document.body.addEventListener("htmx:afterSwap", (e) => formatTimestamps(e.target));
+
+  // --- Sortable tables -------------------------------------------------------
+  // Click a header marked with data-sort to sort the (visible) rows in place.
+  // data-sort="text" | "number" | "date". Date columns sort by the <time>
+  // element's `datetime` attribute (ISO 8601 sorts chronologically as text).
+
+  function cellKey(cell, type) {
+    if (!cell) return "";
+    if (type === "date") {
+      const t = cell.querySelector("time[datetime]");
+      return t ? t.getAttribute("datetime") : cell.textContent.trim();
+    }
+    if (type === "number") {
+      const n = parseFloat(cell.textContent.replace(/[^0-9.\-]/g, ""));
+      return isNaN(n) ? 0 : n;
+    }
+    return cell.textContent.trim().toLowerCase();
+  }
+
+  function sortTable(table, colIdx, th, forceDir) {
+    const tbody = table.tBodies[0];
+    if (!tbody) return;
+    const type = th.getAttribute("data-sort") || "text";
+    const dir = forceDir
+      || (th.getAttribute("aria-sort") === "ascending" ? "descending" : "ascending");
+    Array.from(th.parentElement.cells).forEach((h) => h.removeAttribute("aria-sort"));
+    th.setAttribute("aria-sort", dir);
+    const mult = dir === "ascending" ? 1 : -1;
+    const rows = Array.from(tbody.rows);
+    rows.sort((a, b) => {
+      const av = cellKey(a.cells[colIdx], type);
+      const bv = cellKey(b.cells[colIdx], type);
+      if (av < bv) return -mult;
+      if (av > bv) return mult;
+      return 0;
+    });
+    rows.forEach((r) => tbody.appendChild(r));
+  }
+
+  function initSortableTables() {
+    document.querySelectorAll("table.sortable").forEach((table) => {
+      const head = table.tHead && table.tHead.rows[0];
+      if (!head) return;
+      Array.from(head.cells).forEach((th, idx) => {
+        if (!th.hasAttribute("data-sort")) return;  // skip action columns
+        th.classList.add("th-sortable");
+        th.addEventListener("click", () => sortTable(table, idx, th));
+        // Apply the initial sort for the column marked data-sort-default.
+        const def = th.getAttribute("data-sort-default");
+        if (def) {
+          sortTable(table, idx, th, def === "asc" ? "ascending" : "descending");
+        }
+      });
+    });
+  }
+  document.addEventListener("DOMContentLoaded", initSortableTables);
+
+  // Diagnostic banners are now grouped under a native <details class="notices">
+  // collapsible summary (see templates) — no JS needed to show/hide them.
 
   // --- Side-by-side synced zoom + pan ----------------------------------------
 

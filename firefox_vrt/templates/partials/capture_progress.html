@@ -9,17 +9,24 @@
   <h3>Per-platform tasks</h3>
   {% if tasks %}
   <table class="list">
-    <thead><tr><th>Platform</th><th>Status</th><th>Downloaded</th><th>Task</th></tr></thead>
+    <thead><tr><th>Platform</th><th>Status</th><th>Sets</th><th>Downloaded</th><th>Task</th></tr></thead>
     <tbody>
       {% for t in tasks %}
       <tr>
         <td>{{ t.platform }}</td>
-        <td><span class="badge badge-{{ t.status }}">{{ t.status }}</span></td>
+        <td>
+          <span class="badge badge-{{ t.status }}">{{ t.status }}</span>
+          {% if t.failure_reason %}<div class="error-text">{{ t.failure_reason }}</div>{% endif %}
+        </td>
+        <td>{{ t.mozscreenshots_sets or "—" }}</td>
         <td>
           {{ t.downloaded_count }}
           {% if t.artifact_count is not none %} / {{ t.artifact_count }}{% endif %}
         </td>
-        <td class="mono dim">{{ t.task_id }}</td>
+        <td class="mono">
+          <a target="_blank"
+             href="https://firefox-ci-tc.services.mozilla.com/tasks/{{ t.task_id }}">{{ t.task_id }}</a>
+        </td>
       </tr>
       {% endfor %}
     </tbody>
