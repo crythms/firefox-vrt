@@ -122,10 +122,19 @@ State of one revision's screenshot download.
 
 - **Header** — tree, full revision, status badge, fetch time.
 - **Progress** — live area (polls every 2 s) while `pending` / `fetching`.
-- **Debug details** — expandable (auto-opens on failure): IDs, push ID, data
-  dir, status; outbound links (**Treeherder**, **hg JSON**, **jobs API**,
-  per-task **Task ID**); and a per-task table (one row per platform) with status,
-  run number, and `downloaded / total` artifact count.
+- **Debug details** — expandable (auto-opens on failure): IDs, push ID,
+  **screenshot sets**, data dir, status; outbound links (**Treeherder**, **hg
+  JSON**, **jobs API**, per-task **Task ID**); and a per-task table (one row per
+  platform) with status, **sets**, run number, and `downloaded / total` count.
+
+> **Screenshot sets.** VRT records the `MOZSCREENSHOTS_SETS` each task ran with
+> (e.g. `Toolbars,Tabs`), read from the Taskcluster task definition at fetch
+> time and stored per task. Task definitions expire (~4 weeks on try), so
+> capturing this at fetch time means the provenance survives — letting you
+> compare a months-old capture against a fresh one and confirm they ran the
+> same sets. Captures fetched before this feature show `(unknown)`; run
+> `scripts/backfill_mozscreenshots_sets.py` to fill them in while their task
+> definitions still exist.
 
 > When a push runs more than one screenshots variant on a platform — e.g.
 > `M(ss)` (Fission, the default) and `M-nofis(ss)` (Fission disabled) — VRT
@@ -142,6 +151,11 @@ The main event — the diff between baseline and candidate.
 - **Header** (sticky) — both revisions (linked to their captures) + status badge.
 - **Progress** while `diffing`; auto-refreshes when done.
 - **Summary line** — counts per status (*"N differ · N known noise · …"*).
+- **Set comparison** — right under the summary: a green *"✓ same screenshot
+  sets"* note when both captures ran the same sets, or a **mismatch banner**
+  naming what each side ran and which sets are unique to one (those can't pair,
+  so they show up as `orphan` rows). Says *unknown* if either capture predates
+  set-tracking.
 - **Warning banners** when relevant: *No results* (neither capture had PNGs);
   *Mostly orphans* (≥95% orphaned — likely different sets/platforms, with a
   checklist).
@@ -276,6 +290,9 @@ Helpers in `scripts/` for testing without live CI. Run tests with
 - **`decode_mach_jwt.py`** — diagnoses `mach try` permission errors by decoding
   the cached Auth0 token and showing whether your session carries the `scm_level`
   group claim Lando needs. Run where `mach`'s auth cache lives.
+- **`backfill_mozscreenshots_sets.py`** — fills in `MOZSCREENSHOTS_SETS` for
+  captures fetched before set-tracking, by re-reading their Taskcluster task
+  definitions (only works while those definitions are still live).
 
 ---
 

@@ -20,6 +20,25 @@
       <strong>{{ counts["identical"] }}</strong> identical
     </p>
 
+    {% if sets_status == "mismatch" %}
+    <div class="banner banner-warning">
+      <strong>Different screenshot sets.</strong>
+      Baseline ran <code>{{ base_sets|join(", ") }}</code>; candidate ran
+      <code>{{ cand_sets|join(", ") }}</code>.
+      {% if base_only_sets %} Only in baseline: <code>{{ base_only_sets|join(", ") }}</code>.{% endif %}
+      {% if cand_only_sets %} Only in candidate: <code>{{ cand_only_sets|join(", ") }}</code>.{% endif %}
+      Screenshots from non-shared sets can't pair, so they show up as
+      <strong>orphan</strong> rows below.
+    </div>
+    {% elif sets_status == "match" %}
+    <p class="sets-note">✓ Same screenshot sets: <code>{{ base_sets|join(", ") }}</code></p>
+    {% elif sets_status == "unknown" %}
+    <p class="sets-note dim">
+      Screenshot sets unknown for one or both captures (fetched before
+      set-tracking, or no <code>MOZSCREENSHOTS_SETS</code> on the task).
+    </p>
+    {% endif %}
+
     {% if total_results == 0 %}
     <div class="banner banner-warning">
       <strong>No results.</strong>

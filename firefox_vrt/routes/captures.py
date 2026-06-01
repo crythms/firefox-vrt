@@ -33,6 +33,15 @@ async def capture_detail(
             select(CaptureTask).where(CaptureTask.capture_id == capture_id)
         )
     ).scalars().all()
+    # Capture-level summary of the screenshot sets these tasks ran. Usually a
+    # single value shared across platforms; flag the rare per-platform split.
+    set_values = sorted({t.mozscreenshots_sets for t in tasks if t.mozscreenshots_sets})
+    if not set_values:
+        sets_summary = None
+    elif len(set_values) == 1:
+        sets_summary = set_values[0]
+    else:
+        sets_summary = "varies by platform — see per-task table"
     # Recent captures usable as a baseline picker. Includes the current
     # capture so engineers can do a "diff against self" sanity check —
     # useful for validating the fetch + diff pipeline without needing
@@ -51,6 +60,7 @@ async def capture_detail(
             "request": request,
             "capture": cap,
             "tasks": tasks,
+            "sets_summary": sets_summary,
             "baseline_candidates": baseline_candidates,
         },
     )

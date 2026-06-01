@@ -143,6 +143,9 @@ button:hover { filter: brightness(1.05); }
 .summary { font-size: 15px; margin: 12px 0; }
 .summary strong { font-weight: 700; }
 
+.sets-note { font-size: 13px; margin: 8px 0; }
+.sets-note code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
+
 .filter-chips { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
 .chip { padding: 4px 12px; border-radius: 999px; }
 .chip[data-status][aria-pressed="true"],

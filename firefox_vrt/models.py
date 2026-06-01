@@ -91,6 +91,13 @@ class CaptureTask(Base):
     artifact_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     downloaded_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     failure_reason: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    # The MOZSCREENSHOTS_SETS value this task's CI job ran with (e.g.
+    # "Toolbars,Tabs"), read from the Taskcluster task definition at fetch
+    # time. None when unknown — the task def had no such env var, or the
+    # capture predates set-tracking. Persisted so the provenance survives the
+    # task definition's expiry (~4 weeks on try), letting us compare an old
+    # capture against a new one and know they ran the same sets.
+    mozscreenshots_sets: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     capture: Mapped[Capture] = relationship(back_populates="tasks")
 

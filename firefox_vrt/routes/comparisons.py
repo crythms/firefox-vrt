@@ -8,9 +8,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from typing import Iterable, Optional
+
 from ..db import get_db
 from ..models import (
     COMPARISON_READY,
+    CaptureTask,
     Comparison,
     RESULT_DIFFERS,
     RESULT_IDENTICAL,
@@ -34,6 +37,46 @@ _DISPLAY_ORDER = {
     RESULT_KNOWN_NOISE: 3,
     RESULT_IDENTICAL: 4,
 }
+
+
+def normalize_sets(raw_values: Iterable[Optional[str]]) -> Optional[frozenset]:
+    """Turn a capture's stored MOZSCREENSHOTS_SETS strings (one per task, e.g.
+    "Toolbars,Tabs") into a normalized set of set-names. Returns None when
+    *nothing* was recorded (sets unknown), distinct from an empty set."""
+    names: set[str] = set()
+    found = False
+    for raw in raw_values:
+        if raw:
+            found = True
+            for part in raw.split(","):
+                part = part.strip()
+                if part:
+                    names.add(part)
+    return frozenset(names) if found else None
+
+
+def classify_sets(
+    base: Optional[frozenset], candidate: Optional[frozenset]
+) -> tuple[str, list[str], list[str]]:
+    """Compare two captures' sets. Returns (status, base_only, candidate_only)
+    where status is "unknown" (either side unrecorded), "match", or
+    "mismatch"."""
+    if base is None or candidate is None:
+        return "unknown", [], []
+    if base == candidate:
+        return "match", [], []
+    return "mismatch", sorted(base - candidate), sorted(candidate - base)
+
+
+async def _capture_sets(db: AsyncSession, capture_id: int) -> Optional[frozenset]:
+    rows = (
+        await db.execute(
+            select(CaptureTask.mozscreenshots_sets).where(
+                CaptureTask.capture_id == capture_id
+            )
+        )
+    ).scalars().all()
+    return normalize_sets(rows)
 
 
 @router.get("/comparison/{comparison_id}")
@@ -72,6 +115,10 @@ async def comparison_detail(
     total = sum(counts.values())
     orphan_ratio = counts[RESULT_ORPHAN] / total if total else 0.0
 
+    base_sets = await _capture_sets(db, comp.base_capture_id)
+    cand_sets = await _capture_sets(db, comp.candidate_capture_id)
+    sets_status, base_only_sets, cand_only_sets = classify_sets(base_sets, cand_sets)
+
     return templates.TemplateResponse(
         "comparison.html",
         {
@@ -84,6 +131,11 @@ async def comparison_detail(
             "counts": counts,
             "total_results": total,
             "orphan_ratio": orphan_ratio,
+            "sets_status": sets_status,
+            "base_sets": sorted(base_sets) if base_sets else [],
+            "cand_sets": sorted(cand_sets) if cand_sets else [],
+            "base_only_sets": base_only_sets,
+            "cand_only_sets": cand_only_sets,
         },
     )
 

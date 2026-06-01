@@ -205,6 +205,24 @@ class Clients:
             )
         return out
 
+    async def get_task_env(self, task_id: str) -> dict:
+        """Return the task definition's `payload.env` dict — e.g. containing
+        ``MOZSCREENSHOTS_SETS``. Returns an empty dict if the task definition
+        is gone (expired) or has no env; callers treat that as 'unknown'.
+
+        Note: task *definitions* expire on the same schedule as artifacts, so
+        this is only reliable at fetch time — which is exactly why we persist
+        the result on the CaptureTask rather than looking it up lazily later.
+        """
+        url = f"{self.taskcluster_root}/api/queue/v1/task/{task_id}"
+        r = await self._client.get(url)
+        if r.status_code == 404:
+            return {}
+        r.raise_for_status()
+        data = r.json()
+        env = data.get("payload", {}).get("env", {})
+        return env if isinstance(env, dict) else {}
+
     async def stream_artifact(
         self,
         task_id: str,

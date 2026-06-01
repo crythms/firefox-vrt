@@ -116,6 +116,16 @@ async def _fetch_capture_impl(
             assert cap is not None
             cap.push_id = push_id_lookup
             for t in tasks:
+                # Record which MOZSCREENSHOTS_SETS this task ran, from its
+                # Taskcluster task definition. Best-effort: a failure here
+                # (expired def, network blip) just leaves sets unknown and
+                # never blocks the fetch.
+                sets = None
+                try:
+                    env = await clients.get_task_env(t.task_id)
+                    sets = env.get("MOZSCREENSHOTS_SETS") or None
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("get_task_env failed for %s: %r", t.task_id, exc)
                 session.add(
                     CaptureTask(
                         capture_id=cap.id,
@@ -123,6 +133,7 @@ async def _fetch_capture_impl(
                         task_id=t.task_id,
                         run_id=t.run_id,
                         status=models.TASK_PENDING,
+                        mozscreenshots_sets=sets,
                     )
                 )
             await session.commit()

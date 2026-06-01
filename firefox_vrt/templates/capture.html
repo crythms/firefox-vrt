@@ -55,6 +55,8 @@
           </a>
         {% endif %}
       </dd>
+      <dt>Screenshot sets</dt>
+      <dd>{{ sets_summary if sets_summary else "(unknown)" }}</dd>
       <dt>Data directory</dt><dd class="mono">{{ capture.dir_path or "(unset)" }}</dd>
       <dt>Status</dt>
       <dd>
@@ -73,6 +75,7 @@
         <tr>
           <th>Platform</th>
           <th>Status</th>
+          <th>Sets</th>
           <th>Task ID</th>
           <th>Run</th>
           <th>Downloaded</th>
@@ -84,6 +87,7 @@
         <tr>
           <td>{{ t.platform }}</td>
           <td><span class="badge badge-{{ t.status }}">{{ t.status }}</span></td>
+          <td>{{ t.mozscreenshots_sets or "—" }}</td>
           <td class="mono">
             <a target="_blank"
                href="https://firefox-ci-tc.services.mozilla.com/tasks/{{ t.task_id }}">

@@ -166,6 +166,33 @@ async def test_find_screenshots_tasks_parses_legacy_compact_format(clients: Clie
 
 
 @pytest.mark.asyncio
+async def test_get_task_env_returns_env(clients: Clients) -> None:
+    with respx.mock(base_url=TC) as router:
+        router.get("/api/queue/v1/task/TASK_X").mock(
+            return_value=httpx.Response(
+                200,
+                json={"payload": {"env": {"MOZSCREENSHOTS_SETS": "Toolbars,Tabs"}}},
+            )
+        )
+        env = await clients.get_task_env("TASK_X")
+    assert env == {"MOZSCREENSHOTS_SETS": "Toolbars,Tabs"}
+    await clients.close()
+
+
+@pytest.mark.asyncio
+async def test_get_task_env_empty_when_expired(clients: Clients) -> None:
+    """An expired/missing task definition (404) yields an empty dict, not an
+    error — the caller treats it as 'sets unknown'."""
+    with respx.mock(base_url=TC) as router:
+        router.get("/api/queue/v1/task/GONE").mock(
+            return_value=httpx.Response(404, json={"code": "ResourceNotFound"})
+        )
+        env = await clients.get_task_env("GONE")
+    assert env == {}
+    await clients.close()
+
+
+@pytest.mark.asyncio
 async def test_find_screenshots_tasks_raises_when_no_push(clients: Clients) -> None:
     with respx.mock(base_url=TH) as router:
         router.get("/api/project/try/push/").mock(
