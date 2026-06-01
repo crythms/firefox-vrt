@@ -97,6 +97,46 @@ async def test_find_screenshots_tasks_parses_treeherder_dict_rows(clients: Clien
 
 
 @pytest.mark.asyncio
+async def test_find_screenshots_tasks_drops_nofis_variant(clients: Clients) -> None:
+    """A push that ran both M(ss) and M-nofis(ss) on the same platform should
+    yield only the canonical M(ss) task — not two tasks for one platform."""
+    with respx.mock() as router:
+        router.get(f"{TH}/api/project/try/push/").mock(
+            return_value=httpx.Response(200, json={"results": [{"id": 1932925}]})
+        )
+        router.get(f"{TH}/api/project/try/jobs/").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "results": [
+                        {
+                            # M-nofis(ss) — Fission disabled; should be dropped.
+                            "task_id": "QFMqJ36URNqYdA1ahKUzLw",
+                            "job_type_name": "test-linux2404-64/opt-mochitest-browser-screenshots-nofis",
+                            "job_group_symbol": "M-nofis",
+                            "retry_id": 0,
+                            "result": "success",
+                        },
+                        {
+                            # M(ss) — the canonical Fission run; should be kept.
+                            "task_id": "XtoSiB-4Tzi98XSvl5Bqjw",
+                            "job_type_name": "test-linux2404-64/opt-mochitest-browser-screenshots",
+                            "job_group_symbol": "M",
+                            "retry_id": 0,
+                            "result": "success",
+                        },
+                    ],
+                },
+            )
+        )
+        tasks = await clients.find_screenshots_tasks("try", "deadbeef")
+    assert len(tasks) == 1
+    assert tasks[0].platform == "linux2404-64"
+    assert tasks[0].task_id == "XtoSiB-4Tzi98XSvl5Bqjw"
+    await clients.close()
+
+
+@pytest.mark.asyncio
 async def test_find_screenshots_tasks_parses_legacy_compact_format(clients: Clients) -> None:
     """Legacy compact response: job_property_names + list-of-lists."""
     with respx.mock() as router:

@@ -126,6 +126,11 @@ State of one revision's screenshot download.
   dir, status; outbound links (**Treeherder**, **hg JSON**, **jobs API**,
   per-task **Task ID**); and a per-task table (one row per platform) with status,
   run number, and `downloaded / total` artifact count.
+
+> When a push runs more than one screenshots variant on a platform — e.g.
+> `M(ss)` (Fission, the default) and `M-nofis(ss)` (Fission disabled) — VRT
+> fetches **only the canonical `M(ss)` run**, so you get one task per platform
+> rather than near-duplicate captures.
 - **Compare against a baseline** (once `ready`) — dropdown of ready captures
   (including this one, for a "diff against self" sanity check) + **Run
   comparison**.

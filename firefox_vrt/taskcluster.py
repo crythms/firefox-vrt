@@ -136,28 +136,43 @@ class Clients:
             names = data.get("job_property_names", [])
             jobs = [dict(zip(names, row)) for row in rows]
 
-        tasks: list[ScreenshotTask] = []
+        # A push can run several browser-screenshots variants on the *same*
+        # platform — notably M(ss) (Fission, the default) and M-nofis(ss)
+        # (Fission disabled). They render the same chrome but are distinct
+        # Treeherder jobs, so without filtering we'd fetch both and end up with
+        # two CaptureTasks per platform. We keep only the canonical M(ss) run.
+        chosen: dict[str, tuple[str, ScreenshotTask]] = {}
         for job in jobs:
             task_id = job.get("task_id")
             job_type_name = job.get("job_type_name") or ""
-            # Client-side filter: only browser-screenshots jobs. Other Tier-3
-            # jobs (talos, raptor, etc.) match the broader push query but
-            # aren't relevant to us.
+            # Only browser-screenshots jobs. Other Tier-3 jobs (talos, raptor,
+            # etc.) match the broader push query but aren't relevant to us.
             if "browser-screenshots" not in job_type_name:
                 continue
             if not task_id:
                 continue
+            group_symbol = (job.get("job_group_symbol") or "").strip()
+            # Drop the no-Fission variant (Treeherder symbol M-nofis(ss)); we
+            # only want the default Fission run, M(ss). The marker shows up in
+            # the group symbol and, as a fallback for compact API responses,
+            # as a "-nofis" suffix on the job name.
+            if "nofis" in group_symbol.lower() or "-nofis" in job_type_name.lower():
+                continue
             platform = platform_from_job_name(job_type_name) or "unknown"
-            tasks.append(
-                ScreenshotTask(
-                    platform=platform,
-                    job_type_name=job_type_name,
-                    task_id=str(task_id),
-                    run_id=int(job.get("retry_id", 0) or 0),
-                    result=str(job.get("result", "")),
-                )
+            task = ScreenshotTask(
+                platform=platform,
+                job_type_name=job_type_name,
+                task_id=str(task_id),
+                run_id=int(job.get("retry_id", 0) or 0),
+                result=str(job.get("result", "")),
             )
+            # One task per platform. If two non-nofis screenshots jobs somehow
+            # share a platform, prefer the canonical "M" group; else first seen.
+            prev = chosen.get(platform)
+            if prev is None or (group_symbol == "M" and prev[0] != "M"):
+                chosen[platform] = (group_symbol, task)
 
+        tasks = [task for _, task in chosen.values()]
         if not tasks:
             raise NoScreenshotsJob(
                 f"No browser-screenshots tasks on push {push_id} ({project}/{revision})"
