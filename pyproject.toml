@@ -26,6 +26,13 @@ test = [
     "pytest-asyncio>=0.23",
     "respx>=0.21",
 ]
+# Local drawWindow chrome capture (Marionette-driven). Not needed by the web app
+# itself, which only diffs already-captured screenshots.
+capture = [
+    "marionette-driver>=3.7",
+    "mozrunner>=8.4",
+    "mozprofile>=3.0",
+]
 
 [tool.setuptools.packages.find]
 include = ["firefox_vrt*"]
