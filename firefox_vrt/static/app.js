@@ -224,10 +224,10 @@
     if (pending === 0) return;
     imgs.forEach((img) => {
       if (img.complete) {
-        if (--pending === 0) applyScale(1.0);
+        if (--pending === 0) sbsFit();
       } else {
         img.addEventListener("load", () => {
-          if (--pending === 0) applyScale(1.0);
+          if (--pending === 0) sbsFit();
         });
       }
     });

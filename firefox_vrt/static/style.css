@@ -372,8 +372,11 @@ details.notices .banner { margin: 8px 0 0; }
 .sbs-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
 .sbs-controls { display: flex; gap: 6px; align-items: center; }
 .sbs-controls button { padding: 6px 10px; }
-.sbs-panes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; min-height: 70vh; }
-.sbs-pane { display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--border); border-radius: 6px; padding: 8px; background: var(--card-bg); }
+.sbs-panes { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; min-height: 70vh; }
+/* min-width:0 lets a pane shrink below its (wide) image's intrinsic width;
+   without it a grid item defaults to min-width:auto and blows the column out,
+   pushing the sibling pane off-screen. */
+.sbs-pane { display: flex; flex-direction: column; min-width: 0; gap: 6px; border: 1px solid var(--border); border-radius: 6px; padding: 8px; background: var(--card-bg); }
 .sbs-pane h2 { margin: 0; font-size: 13px; color: var(--dim); }
 .sbs-scroll { overflow: auto; max-height: 80vh; border: 1px solid var(--border); border-radius: 4px; }
 .sbs-scroll img { display: block; }
