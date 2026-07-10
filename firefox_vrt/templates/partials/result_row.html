@@ -24,6 +24,22 @@
       Open side-by-side ↗
     </a>
     {% endif %}
+
+    <form class="triage" data-triage="{{ result.triage }}"
+          hx-post="/comparison/{{ comparison_id }}/result/{{ result.id }}/triage"
+          hx-target="#result-{{ result.id }}"
+          hx-swap="outerHTML"
+          hx-trigger="change">
+      <label class="triage-select"><span class="dim">Triage</span>
+        <select name="triage">
+          {% for value in ["untriaged", "expected", "regression", "needs-investigation"] %}
+          <option value="{{ value }}"{% if result.triage == value %} selected{% endif %}>{{ value }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <input class="triage-notes" type="text" name="notes"
+             value="{{ result.notes }}" placeholder="notes…">
+    </form>
   </div>
 
   <div class="result-images{% if result.status == 'identical' %} two-up{% endif %}">

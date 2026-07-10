@@ -380,3 +380,12 @@ details.notices .banner { margin: 8px 0 0; }
 .sbs-pane h2 { margin: 0; font-size: 13px; color: var(--dim); }
 .sbs-scroll { overflow: auto; max-height: 80vh; border: 1px solid var(--border); border-radius: 4px; }
 .sbs-scroll img { display: block; }
+
+/* Triage control (result rows) */
+.triage { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.triage-select { display: flex; align-items: center; gap: 6px; }
+.triage select, .triage-notes { padding: 3px 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--card-bg); color: inherit; font: inherit; }
+.triage-notes { flex: 1; min-width: 0; }
+.triage[data-triage="regression"] select { border-color: #e66; color: #e66; }
+.triage[data-triage="expected"] select { border-color: #6b6; color: #6b6; }
+.triage[data-triage="needs-investigation"] select { border-color: #db4; color: #db4; }
