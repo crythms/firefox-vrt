@@ -26,8 +26,9 @@ from ..models import (
     TASK_READY,
     Capture,
     CaptureTask,
+    Comparison,
 )
-from .runner import capture_matrix
+from .runner import capture_matrix, capture_states
 from .scenarios import DEFAULT_SCENARIO, Scenario
 
 log = logging.getLogger(__name__)
@@ -111,43 +112,80 @@ async def capture_configs(
     return ids
 
 
-__all__ = ["capture_configs", "create_capture", "DEFAULT_PLATFORM"]
+async def create_comparison(
+    settings: Settings, base_id: int, cand_id: int, threshold: float = 0.001
+) -> int:
+    """Create (replacing any existing) a base-vs-candidate Comparison; return id."""
+    sf = session_factory()
+    async with sf() as session:
+        existing = (
+            await session.execute(
+                select(Comparison).where(
+                    Comparison.base_capture_id == base_id,
+                    Comparison.candidate_capture_id == cand_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            await session.delete(existing)
+            await session.flush()
+        comp = Comparison(
+            base_capture_id=base_id, candidate_capture_id=cand_id, threshold=threshold
+        )
+        session.add(comp)
+        await session.commit()
+        await session.refresh(comp)
+        return comp.id
+
+
+async def capture_versions(
+    base_binary,
+    candidate_binary,
+    settings: Settings,
+    scenario: Scenario = DEFAULT_SCENARIO,
+    config=None,
+    base_label: str = "base",
+    candidate_label: str = "candidate",
+    log_dir: Optional[Path] = None,
+) -> tuple[int, int, int]:
+    """Version-vs-version: capture one config on two builds and auto-create the
+    comparison. Captures are keyed revision=<label>, project="local:<config>"
+    (same config, different build). Returns (base_id, candidate_id, comparison_id).
+    """
+    cfg = config or scenario.configs[0]
+    project = f"local:{cfg.name}"
+    base_states = await asyncio.to_thread(
+        capture_states, base_binary, scenario, cfg.prefs, log_dir, "base"
+    )
+    cand_states = await asyncio.to_thread(
+        capture_states, candidate_binary, scenario, cfg.prefs, log_dir, "candidate"
+    )
+    base_id = await create_capture(settings, base_label, project, base_states)
+    cand_id = await create_capture(settings, candidate_label, project, cand_states)
+    comp_id = await create_comparison(settings, base_id, cand_id)
+    return base_id, cand_id, comp_id
+
+
+__all__ = [
+    "DEFAULT_PLATFORM",
+    "capture_configs",
+    "capture_versions",
+    "create_capture",
+    "create_comparison",
+]
 
 
 if __name__ == "__main__":
-    # End-to-end demo: capture the default matrix into the app's store, create a
-    # config-vs-config comparison (default vs sidebar-revamp), run the existing
-    # diff pipeline, and print the results.
+    # Demo/verify. Default mode diffs two configs on one build; `versions` mode
+    # captures one config on two builds and diffs (pass the same binary twice as
+    # a wiring/determinism check -> expect ~0 diff).
     import glob
     import os
+    import sys
 
     from .. import config, db
     from ..comparator import run_comparison
-    from ..models import Comparison, Result
-
-    async def _create_comparison(settings, base_id, cand_id, threshold=0.001):
-        sf = session_factory()
-        async with sf() as session:
-            existing = (
-                await session.execute(
-                    select(Comparison).where(
-                        Comparison.base_capture_id == base_id,
-                        Comparison.candidate_capture_id == cand_id,
-                    )
-                )
-            ).scalar_one_or_none()
-            if existing is not None:
-                await session.delete(existing)
-                await session.flush()
-            comp = Comparison(
-                base_capture_id=base_id,
-                candidate_capture_id=cand_id,
-                threshold=threshold,
-            )
-            session.add(comp)
-            await session.commit()
-            await session.refresh(comp)
-            return comp.id
+    from ..models import Result
 
     async def _print_results(comp_id):
         sf = session_factory()
@@ -184,9 +222,17 @@ if __name__ == "__main__":
         logs = repo / "spike_out" / "matrix" / "logs"
         logs.mkdir(parents=True, exist_ok=True)
 
-        ids = await capture_configs(binary, settings, log_dir=logs)
-        print(f"captures: {ids}")
-        comp_id = await _create_comparison(settings, ids["default"], ids["sidebar-revamp"])
+        if sys.argv[1:] and sys.argv[1] == "versions":
+            base_id, cand_id, comp_id = await capture_versions(
+                binary, binary, settings, log_dir=logs
+            )
+            print(f"base={base_id} candidate={cand_id} comparison={comp_id}")
+        else:
+            ids = await capture_configs(binary, settings, log_dir=logs)
+            print(f"captures: {ids}")
+            comp_id = await create_comparison(
+                settings, ids["default"], ids["sidebar-revamp"]
+            )
         await run_comparison(comp_id, settings)
         await _print_results(comp_id)
 

@@ -7,9 +7,15 @@ pixel-by-pixel, and shows you side-by-side which UI screenshots changed and by
 how much. Meant as a team-supported replacement for the older
 `screenshots.mattn.ca/compare/` workflow.
 
-You don't need a local Firefox build to *use* it — just a revision that has
-screenshots in CI. It's for **QA/release testers** eyeballing chrome changes and
-**engineers** confirming a chrome change altered only what they expected.
+You don't need a local Firefox build to *use* the fetch path — just a revision
+that has screenshots in CI. It's for **QA/release testers** eyeballing chrome
+changes and **engineers** confirming a chrome change altered only what they
+expected.
+
+**Two ways to get screenshots:** *fetch* them from a CI push (the walkthrough
+below), or **capture them locally** from a Firefox build with the built-in
+drawWindow engine — no CI, works on macOS, and can pin Nimbus/pref states per
+shot (see [Local capture](#local-capture-drawwindow)).
 
 ---
 
@@ -62,6 +68,9 @@ open http://localhost:8000
 Or `docker compose up`. Data (SQLite DB + downloaded screenshots) lives in
 `./data/`.
 
+For **local capture** (the drawWindow engine, below), also install its extra —
+`.venv/bin/pip install -e ".[capture]"` — which pulls in `marionette-driver`.
+
 ---
 
 ## Walkthrough
@@ -90,6 +99,40 @@ Or `docker compose up`. Data (SQLite DB + downloaded screenshots) lives in
 > Pairing also requires matching **sets** and **platforms**: two captures only
 > produce useful results if they ran the *same* sets on the *same* platform —
 > otherwise almost everything is `orphan`.
+
+---
+
+## Local capture (drawWindow)
+
+Instead of fetching CI screenshots, capture the real chrome UI straight from a
+local Firefox build — no CI, no `MOZSCREENSHOTS_SETS`, and it works on macOS. The
+engine (`firefox_vrt/capture/`) drives the build via **Marionette** (chrome
+context) and reads back the composited window with `drawWindow` +
+`DRAWWINDOW_USE_WIDGET_LAYERS`. Rendering is pinned to Software WebRender and live
+Nimbus experiments are disabled, so captures are deterministic — the same build
+twice yields a **0-pixel** diff. Config/Nimbus states are pinned via profile
+prefs; most chrome features resolve to a backing pref (e.g. `sidebar.revamp`), so
+no server enrollment is needed.
+
+A **scenario** (`capture/scenarios.py`) is a matrix of `ui_states` (default, N
+tabs, sidebar open, …) × `configs` (pref/Nimbus sets). Each cell is captured in a
+fresh session and stored as an ordinary `Capture` (one per config; the `ui_state`
+is the paired filename), so the existing pairing / diff / UI all apply unchanged.
+
+Both comparison axes land in the app as browsable, triageable comparisons:
+
+```bash
+# config-vs-config: one build, feature on vs off (default vs sidebar-revamp)
+.venv/bin/python -m firefox_vrt.capture.source            # newest obj-*/dist build
+
+# version-vs-version: one config, two builds (your patch vs a base)
+.venv/bin/python -m firefox_vrt.capture.source versions   # same binary twice = 0-diff check
+```
+
+From Python: `capture_configs(binary, settings)` and
+`capture_versions(base_binary, candidate_binary, settings)` (the latter
+auto-creates the comparison). Capture needs a **visible** window — widget-layer
+readback can't run headless.
 
 ---
 
@@ -206,11 +249,12 @@ Helpers in `scripts/` for testing without live CI. Run tests with
 
 ## Not in the UI yet
 
-In the data model / backend but not yet surfaced:
+Still backend-only or unfinished:
 
-- **Triage** — each result can carry a state (`untriaged` / `expected` /
-  `regression` / `needs-investigation`) and a note, with a save endpoint, but the
-  rows don't render triage controls yet.
 - **Authentication** — none; rely on the hosting layer (IAM / VPN).
-- **macOS captures** — blocked upstream (Mozilla bug 1554821).
-- **Auto-baseline selection** — you always pick the baseline manually.
+- **Auto-baseline for *fetched* captures** — the CI-fetch flow still needs a
+  manual baseline pick; local `capture_versions` auto-creates the comparison.
+
+Recently shipped: result rows now render **triage** controls (state + note); and
+**local drawWindow capture works on macOS** — the upstream macOS block (Mozilla
+bug 1554821) only affects the CI `mozscreenshots` job, not the local engine.

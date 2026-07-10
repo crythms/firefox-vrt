@@ -15,27 +15,37 @@ from .drawwindow import ChromeCapturer
 from .scenarios import Scenario
 
 
+def capture_states(binary, scenario: Scenario, prefs: dict, log_dir: Optional[Path] = None, tag: str = ""):
+    """Capture every ui_state under `prefs`, each in a fresh session.
+
+    Returns {ui_state_name: png_bytes}. This is the shared primitive: the config
+    axis calls it once per config on one binary; the version axis calls it once
+    per binary with a fixed config.
+    """
+    states: dict[str, bytes] = {}
+    for st in scenario.ui_states:
+        gecko_log = "-"
+        if log_dir is not None:
+            gecko_log = str(Path(log_dir) / f"gecko-{tag or 'run'}-{st.name}.log")
+        with ChromeCapturer(
+            binary,
+            prefs=prefs,
+            width=scenario.width,
+            height=scenario.height,
+            gecko_log=gecko_log,
+        ) as cap:
+            for step in st.steps:
+                apply_step(cap, step)
+            states[st.name] = cap.capture_png()
+    return states
+
+
 def capture_matrix(binary, scenario: Scenario, log_dir: Optional[Path] = None):
     """Return {config_name: {ui_state_name: png_bytes}} for the whole matrix."""
-    results: dict[str, dict[str, bytes]] = {}
-    for cfg in scenario.configs:
-        states: dict[str, bytes] = {}
-        for st in scenario.ui_states:
-            gecko_log = "-"
-            if log_dir is not None:
-                gecko_log = str(Path(log_dir) / f"gecko-{cfg.name}-{st.name}.log")
-            with ChromeCapturer(
-                binary,
-                prefs=cfg.prefs,
-                width=scenario.width,
-                height=scenario.height,
-                gecko_log=gecko_log,
-            ) as cap:
-                for step in st.steps:
-                    apply_step(cap, step)
-                states[st.name] = cap.capture_png()
-        results[cfg.name] = states
-    return results
+    return {
+        cfg.name: capture_states(binary, scenario, cfg.prefs, log_dir=log_dir, tag=cfg.name)
+        for cfg in scenario.configs
+    }
 
 
 def write_matrix(results, out_dir):
